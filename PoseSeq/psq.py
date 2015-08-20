@@ -202,9 +202,9 @@ def decodeQuantizedVec(bits, nelem, mcut = 0):
 def strHash32(s):
 	h = 2166136261
 	for c in s:
+		h ^= ord(c)
 		h *= 16777619
 		h &= 0xFFFFFFFF
-		h ^= ord(c)
 	return h
 
 def strHash16(s):

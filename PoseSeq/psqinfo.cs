@@ -38,8 +38,8 @@ sealed class Util {
 	public static uint StrHash32(string s) {
 		uint h = 2166136261;
 		foreach (char c in s) {
-			h *= 16777619;
 			h ^= (byte)c;
+			h *= 16777619;
 		}
 		return h;
 	}
@@ -382,10 +382,19 @@ class PoseSeq {
 		mHead.WriteInfo(tw);
 		tw.WriteLine();
 		if (mNode != null) {
+			Dictionary<int, string> nameDict = new Dictionary<int, string>();
+			int hcol = 0;
 			for (int i = 0; i < mHead.nodeNum; ++i) {
 				tw.WriteLine("-- node[{0}] ------", i);
 				mNode[i].WriteInfo(tw);
+				if (nameDict.ContainsKey(mNode[i].mName.mHash)) {
+					++hcol;
+				} else {
+					nameDict[mNode[i].mName.mHash] = mNode[i].mName.mStr;
+				}
 			}
+			tw.WriteLine();
+			tw.WriteLine("name hash collisions = {0}", hcol);
 		}
 		tw.WriteLine();
 		if (mPoseSize != null) {

@@ -33,7 +33,6 @@ sealed class Util {
 		return s;
 	}
 
-	// FMV-1a
 	// http://www.isthe.com/chongo/tech/comp/fnv/index.html
 	public static uint StrHash32(string s) {
 		uint h = 2166136261;
@@ -332,6 +331,7 @@ class PoseSeq {
 	public VEC[] mVec;
 	public PoseNode[] mNode;
 	public uint[] mPoseSize;
+	public long mPoseTop;
 
 	public void Read(BinaryReader br) {
 		mHead.Read(br);
@@ -356,6 +356,7 @@ class PoseSeq {
 		for (int i = 0; i < npose; ++i) {
 			mPoseSize[i] = br.ReadUInt32();
 		}
+		mPoseTop = br.BaseStream.Position;
 	}
 
 	public string GetVecStr(int idx) {
@@ -399,10 +400,12 @@ class PoseSeq {
 		tw.WriteLine();
 		if (mPoseSize != null) {
 			uint psum = 0;
+			uint org = 0;
 			for (int i = 0; i < mHead.poseNum; ++i) {
 				uint psize = mPoseSize[i];
 				psum += psize;
-				tw.WriteLine("pose[{0}]: size = 0x{1:X} bits (0x{2} bytes)", i, psize, Util.ByteDiv(psize));
+				tw.WriteLine("pose[{0}]: @ 0x{1:X}:{2}, size = 0x{3:X} bits (0x{4:X} bytes)", i, mPoseTop + (org/8), org&7, psize, Util.ByteDiv(psize));
+				org += psize;
 			}
 			tw.WriteLine("(total = 0x{0:X})", psum);
 		}

@@ -197,7 +197,6 @@ def decodeQuantizedVec(bits, nelem, mcut = 0):
 		v.append(buildF32(e, m))
 	return v
 
-# FMV-1a
 # http://www.isthe.com/chongo/tech/comp/fnv/index.html
 def strHash32(s):
 	h = 2166136261
@@ -605,7 +604,7 @@ class PoseList:
 			return self.nodes[0].getNumPoses()
 		return 0
 
-	def encode(self):
+	def encode(self, verbose = False):
 		self.bits = 0
 		self.nbits = 0
 		nposes = self.getNumPoses()
@@ -621,7 +620,7 @@ class PoseList:
 				self.nbits += n
 				self.rawBitCnt += node.getRawFrameBitCount(fno)
 			self.poseBitLen.append(self.nbits - poseOrg)
-		if True:
+		if verbose:
 			print "raw bytes:", ceilDiv(self.rawBitCnt, 8)
 			print "enc bytes:", ceilDiv(self.nbits, 8)
 			pct = div0(float(self.nbits), (self.rawBitCnt / 100.0))

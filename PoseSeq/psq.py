@@ -89,8 +89,16 @@ def buildF32(e, m, s=0):
 def intEncodeFloat(x, bits):
 	return long(x * ((1<<(bits-1)) - 1)) & ((1<<bits) - 1)
 
+def intDecodeFloat(x, bits):
+	m = ((1<<(bits-1)) - 1)
+	i = m - ((x & ((1<<bits) - 1)) ^ m)
+	return float(i) / m
+
 def intEncodeAng(ang, bits):
 	return long(ang * (float(1<<bits) / (pi*2.0))) & ((1<<bits) - 1)
+
+def intDecodeAng(val, bits):
+	return float(val & ((1<<bits)-1)) * ((pi*2.0) / (float(1<<bits)))
 
 # http://lgdv.cs.fau.de/publications/publication/Pub.2010.tech.IMMD.IMMD9.onfloa/
 # http://jcgt.org/published/0003/02/01/
@@ -144,6 +152,45 @@ def octaEncodeQuat(q, axisBits, angleBits):
 			bits = (1 << (axisBits*2)) - 1
 	return bits
 
+def octaDecodeAxis(oct):
+	x = oct[0]
+	y = oct[1]
+	ax = abs(x)
+	ay = abs(y)
+	z = 1.0 - ax - ay
+	if z < 0.0:
+		x = (1.0 - ay) * signNZ(x)
+		y = (1.0 - ax) * signNZ(y)
+	alen = sqrt(sq(x) + sq(y) + sq(z))
+	if alen:
+		d = 1.0 / alen
+		x *= d
+		y *= d
+		z *= d
+	return [x, y, z]
+
+def octaDecodeQuat(val, axisBits, angleBits):
+	ang = intDecodeAng(val >> (axisBits*2), angleBits)
+	qx = 0.0
+	qy = 0.0
+	qz = 0.0
+	qw = 1.0
+	if ang:
+		ox = intDecodeFloat(val, axisBits)
+		oy = intDecodeFloat(val >> axisBits, axisBits)
+		axis = octaDecodeAxis([ox, oy])
+		ha = ang * 0.5
+		sinh = sin(ha)
+		cosh = cos(ha)
+		qx = axis[0] * sinh
+		qy = axis[1] * sinh
+		qz = axis[2] * sinh
+		qw = cosh
+	else:
+		if val & ((1 << (axisBits*2)) - 1):
+			qw = -1.0
+	return [qx, qy, qz, qw]
+
 def limF32(x):
 	a = array('f', [x])
 	s = a.tostring()
@@ -154,19 +201,19 @@ def limF32(x):
 def vecLimF32(v):
 	return [limF32(v[i]) for i in xrange(len(v))]
 	
-def encodeQuantizedExpF32(x):
+def encodeRelExpF32(x):
 	e = getExponentF32(x)
-	if e > 0: print "!!! Error: exponent > 0 !!!"
+	if e > 0: print "!!! Error: rel. exponent > 0 !!!"
 	return (abs(e) + 1) & 0x7F
 
-def encodeQuantizedVec(v, mcut = 0):
+def encodeRelVec(v, mcut = 0):
 	maxExp = 0
-	for x in v: maxExp = max(maxExp, encodeQuantizedExpF32(x))
+	for x in v: maxExp = max(maxExp, encodeRelExpF32(x))
 	n = bitLen32(maxExp)
 	bits = 1 << n
 	cnt = n + 1
 	for x in v:
-		e = encodeQuantizedExpF32(x)
+		e = encodeRelExpF32(x)
 		bits |= e << cnt
 		cnt += n
 		m = getFractionBitsF32(x)
@@ -175,20 +222,20 @@ def encodeQuantizedVec(v, mcut = 0):
 		cnt += 23-mcut
 	return (bits, cnt)
 
-def decodeQuantizedExpF32(e):
+def decodeRelExpF32(e):
 	e -= 1
 	if e:
 		if e < 0: e = -127
 		else: e = -e
 	return e
 
-def decodeQuantizedVec(bits, nelem, mcut = 0):
+def decodeRelVec(bits, nelem, mcut = 0):
 	n = ctz32(bits & 0xFFFFFFFF)
 	cnt = n + 1
 	v = []
 	for i in xrange(nelem):
 		ee = (bits >> cnt) & ((1 << n) - 1)
-		e = decodeQuantizedExpF32(ee)
+		e = decodeRelExpF32(ee)
 		cnt += n
 		m = (bits >> cnt)
 		m &= ((1<<(23-mcut)) - 1)
@@ -365,18 +412,18 @@ class BaseTrack:
 	def isSparse(self):
 		return self.getAxisCount() != self.getElemCount()
 
-	def quantize(self, v):
+	def getRelVec(self, v):
 		return [limF32((v[i] - self.bbMin[i]) * self.bbScl[i]) for i in xrange(len(v))]
 
 	def encodeVec(self, v, mcut):
-		qv = self.quantize(v)
+		rv = self.getRelVec(v)
 		if self.isSparse():
 			msk = self.getAxisMask()
-			sqv = []
+			srv = []
 			for i in xrange(self.getElemCount()):
-				if msk & (1 << i): sqv.append(qv[i])
-			qv = sqv
-		return encodeQuantizedVec(qv, mcut)
+				if msk & (1 << i): srv.append(rv[i])
+			rv = srv
+		return encodeRelVec(rv, mcut)
 
 	def encode(self):
 		self.nbits = 0

@@ -86,16 +86,53 @@ def getExponentF32(x):
 def buildF32(e, m, s=0):
 	return setBitsF32((((int(e)+127)&0xFF) << 23) | int(m) | ((int(s)&1)<<31))
 
-def intEncodeFloat(x, bits):
-	return long(x * ((1<<(bits-1)) - 1)) & ((1<<bits) - 1)
+def intEncodeSignedUnit(x, bits):
+	return long(round(x * ((1<<(bits-1)) - 1))) & ((1<<bits) - 1)
 
-def intDecodeFloat(x, bits):
+def intDecodeSignedUnit(x, bits):
 	m = ((1<<(bits-1)) - 1)
 	i = m - ((x & ((1<<bits) - 1)) ^ m)
 	return float(i) / m
 
+def intEncodeSignedUnitB(x, bits, biasBits):
+	m = (1<<(bits-1)) - 1
+	s = m & (~((1<<biasBits)-1))
+	b = int(x < 0)
+	b = ((1<<(biasBits-1)) ^ -b) + b
+	x = x*s + b
+	return long(round(x)) & ((1<<bits) - 1)
+
+def intDecodeSignedUnitB(x, bits, biasBits):
+	m = ((1<<(bits-1)) - 1)
+	s = m & (~((1<<biasBits)-1))
+	b = int((x & (1<<(bits-1))) != 0)
+	b = ((1<<(biasBits-1)) ^ -b) + b
+	i = m - ((x & ((1<<bits) - 1)) ^ m)
+	i -= b
+	return float(i) / s
+
+def intEncodeUnit(x, bits):
+	m = (1<<bits) - 1
+	return long(round(x * m)) & m
+
+def intDecodeUnit(x, bits):
+	return float(x) / ((1<<bits) - 1)
+
+def intEncodeUnitB(x, bits, biasBits):
+	m = (1<<bits) - 1
+	s = m & (~((1<<biasBits)-1))
+	b = 1<<(biasBits-1)
+	x = x*s + b
+	return long(round(x)) & ((1<<bits) - 1)
+
+def intDecodeUnitB(x, bits, biasBits):
+	m = (1<<bits) - 1
+	s = m & (~((1<<biasBits)-1))
+	b = 1<<(biasBits-1)
+	return float(x - b) / s
+
 def intEncodeAng(ang, bits):
-	return long(ang * (float(1<<bits) / (pi*2.0))) & ((1<<bits) - 1)
+	return long(round(ang * (float(1<<bits) / (pi*2.0)))) & ((1<<bits) - 1)
 
 def intDecodeAng(val, bits):
 	return float(val & ((1<<bits)-1)) * ((pi*2.0) / (float(1<<bits)))
@@ -144,8 +181,8 @@ def octaEncodeQuat(q, axisBits, angleBits):
 			oct = octaEncodeAxis(axis)
 		else:
 			oct = [0.0, 0.0]
-		bits = intEncodeFloat(oct[0], axisBits)
-		bits |= intEncodeFloat(oct[1], axisBits) << axisBits
+		bits = intEncodeSignedUnit(oct[0], axisBits)
+		bits |= intEncodeSignedUnit(oct[1], axisBits) << axisBits
 		bits |= iang << (axisBits*2)
 	else:
 		if cosh < 0:
@@ -176,8 +213,8 @@ def octaDecodeQuat(val, axisBits, angleBits):
 	qz = 0.0
 	qw = 1.0
 	if ang:
-		ox = intDecodeFloat(val, axisBits)
-		oy = intDecodeFloat(val >> axisBits, axisBits)
+		ox = intDecodeSignedUnit(val, axisBits)
+		oy = intDecodeSignedUnit(val >> axisBits, axisBits)
 		axis = octaDecodeAxis([ox, oy])
 		ha = ang * 0.5
 		sinh = sin(ha)

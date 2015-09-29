@@ -155,7 +155,10 @@ def octaEncodeAxis(axis):
 	ox = x * d
 	oy = y * d
 	if z < 0.0:
-		return [(1.0 - abs(oy)) * signNZ(ox), (1.0 - abs(ox)) * signNZ(oy)]
+		tx = (1.0 - abs(oy)) * signNZ(ox)
+		ty = (1.0 - abs(ox)) * signNZ(oy)
+		ox = tx
+		oy = ty
 	return [limF32(ox), limF32(oy)]
 
 def octaEncodeQuat(q, axisBits, angleBits):
@@ -386,15 +389,6 @@ RORDER.ZYX = 5
 def rotOrdFromStr(str):
 	try: return getattr(RORDER, str.upper())
 	except: return RORDER.XYZ
-
-def rOrdFromStr(s):
-	if s == 'xyz': return RORDER.XYZ
-	elif s == 'xzy': return RORDER.XZY
-	elif s == 'yxz': return RORDER.YXZ
-	elif s == 'yzx': return RORDER.YZX
-	elif s == 'zxy': return RORDER.ZXY
-	elif s == 'zyx': return RORDER.ZYX
-	return RORDER.XYZ
 
 class BaseTrack:
 	def __init__(self, data):

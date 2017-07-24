@@ -64,6 +64,20 @@ public struct QUAT {
 		this.z = other.z;
 		this.w = other.w;
 	}
+	
+	public float this[int i] {
+		get {
+			float val;
+			switch (i) {
+				case 0: val = x; break;
+				case 1: val = y; break;
+				case 2: val = z; break;
+				case 3: val = w; break;
+				default: val = Single.NaN; break;
+			}
+			return val;
+		}
+	}
 		
 	public void Mul(ref QUAT q) {
 		float tx = w*q.x + x*q.w + y*q.z - z*q.y;
@@ -1188,6 +1202,38 @@ public class cMotClipReader {
 		br.Close();
 	}
 	
+	protected void DumpLogVecs(TextWriter tw, cNode node) {
+		if (node.mRotTrk == null || node.mRotTrk.mSrcMask == 0) return;
+		int nfrm = mFramesNum;
+		for (int c = 0; c < 3; ++c) {
+			tw.WriteLine(@"   {");
+			tw.WriteLine("      name = {0}:lv{1}", node.mName, "xyz"[c]);
+			tw.Write("      data =");
+			for (int i = 0; i < nfrm; ++i) {
+				VEC lv = node.GetLogVec(i);
+				tw.Write(" {0}", lv[c]);
+			}
+			tw.WriteLine();
+			tw.WriteLine(@"   }");
+		}
+	}
+	
+	protected void DumpQuats(TextWriter tw, cNode node) {
+		if (node.mRotTrk == null || node.mRotTrk.mSrcMask == 0) return;
+		int nfrm = mFramesNum;
+		for (int c = 0; c < 4; ++c) {
+			tw.WriteLine(@"   {");
+			tw.WriteLine("      name = {0}:q{1}", node.mName, "xyzw"[c]);
+			tw.Write("      data =");
+			for (int i = 0; i < nfrm; ++i) {
+				QUAT q = node.GetQuat(i);
+				tw.Write(" {0}", q[c]);
+			}
+			tw.WriteLine();
+			tw.WriteLine(@"   }");
+		}
+	}
+	
 	protected void DumpRotChans(TextWriter tw, cNode node) {
 		if (node.mRotTrk == null || node.mRotTrk.mSrcMask == 0) return;
 		int nfrm = mFramesNum;
@@ -1231,10 +1277,14 @@ public class cMotClipReader {
 			if (node.mRotTrk != null) {
 				switch (mode) {
 					case eDumpMode.QUATS:
-						ntrk += 4;
+						if (node.mRotTrk.mSrcMask != 0) {
+							ntrk += 4;
+						}
 						break;
 					case eDumpMode.LOGVECS:
-						ntrk += 3;
+						if (node.mRotTrk.mSrcMask != 0) {
+							ntrk += 3;
+						}
 						break;
 					default:
 						ntrk += node.mRotTrk.NumSrcChannels;
@@ -1251,7 +1301,17 @@ public class cMotClipReader {
 		tw.WriteLine("   tracklength = {0}", mFramesNum);
 		tw.WriteLine("   tracks = {0}", ntrk);
 		foreach (cNode node in mNodes) {
-			DumpRotChans(tw, node);
+			switch (mode) {
+				case eDumpMode.LOGVECS:
+					DumpLogVecs(tw, node);
+					break;
+				case eDumpMode.QUATS:
+					DumpQuats(tw, node);
+					break;
+				default:
+					DumpRotChans(tw, node);
+					break;
+			}
 			DumpPosChans(tw, node);
 		}
 		tw.WriteLine(@"}");
@@ -1276,25 +1336,38 @@ public class HClipTool {
 		}
 	}
 
-	public static void Main(string[] argStrs) {
+	public static int Main(string[] argStrs) {
 		Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
 		
 		cArgs args = new cArgs();
 		args.Parse(argStrs);
 		
-		string fpath = @"walk.clip";
+		if (args.ArgNum < 1) {
+			Console.Error.WriteLine("hclip <motion.clip>");
+			return -1;
+		}
+		
+		string clpPath = args.GetArg(0);
 		var clip = new cHouClip();
-		clip.Load(fpath);
+		clip.Load(clpPath);
 		//PrintClipInfo(clip, Console.Out);
 
 		var mcw = new cMotClipWriter(clip);
-		string motPath = "_test.mclp";
+		string motPath = clpPath.Replace(".clip", ".mclp");
 		mcw.Save(motPath);
 		
 		var mcr = new cMotClipReader();
 		mcr.Load(motPath);
 		
-		mcr.DumpClip(Console.Out);
+		eDumpMode dumpMode = eDumpMode.DEFAULT;
+		if (args.HasOption("logvecs")) {
+			dumpMode = eDumpMode.LOGVECS;
+		} else if (args.HasOption("quats")) {
+			dumpMode = eDumpMode.QUATS;
+		}
+		mcr.DumpClip(Console.Out, dumpMode);
+		
+		return 0;
 	}
 
 

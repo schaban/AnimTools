@@ -390,8 +390,8 @@ void cMotion::load(const char* pPath) {
 			maxCut = pCh->cut;
 		}
 	}
-	mCut = maxCut;
-	//::printf("%d .. %d\n", minCut, maxCut);
+	mCut = (int)((float)maxCut * 0.75f);
+	::printf("coefs cut: %d .. %d -> %d\n", minCut, maxCut, mCut);
 
 	size_t evalCoefsSize = mRotChansNum * (mCut + mCut - 1) * sizeof(float);
 	cudaMallocHost(&mpEvalCoefsCPU, evalCoefsSize);
@@ -523,12 +523,15 @@ __global__ void eval_kernel(float* pRes, const float* pCoefs, float t, int n, in
 	eval_sub(pRes, pCoefs, t, n, tid);
 }
 
+static int s_blkMin = 64;
+static int s_blkMax = 128;
+
 static int calc_thr_num(int nwk) {
 	int n = (int)::log2(nwk) - 1;
 	if (n < 0) n = 0;
 	n = 1 << n;
-	if (n < 16) n = 16;
-	if (n > 1024) n = 1024;
+	if (n < s_blkMin) n = s_blkMin;
+	if (n > s_blkMax) n = s_blkMax;
 	return n;
 }
 
@@ -550,6 +553,16 @@ void cMotion::eval_dev(float frame) {
 static cMotion s_mot;
 
 void init() {
+	cudaDeviceProp devProps;
+	cudaGetDeviceProperties(&devProps, 0);
+	s_blkMax = devProps.maxThreadsPerBlock / 8;
+	::printf("device: %s, compute %d.%d\n", devProps.name, devProps.major, devProps.minor);
+	::printf("SM count = %d\n", devProps.multiProcessorCount);
+	::printf("max thr/SM = %d\n", devProps.maxThreadsPerMultiProcessor);
+	::printf("max thr/blk = %d\n", devProps.maxThreadsPerBlock);
+	::printf("concurrent exec = %s\n", devProps.concurrentKernels ? "yes" : "no");
+	::printf("\n");
+
 	const char* pPath = "test.mclp";
 	s_mot.load(pPath);
 	::printf("#rot chans = %d\n", s_mot.get_nrot());

@@ -495,7 +495,9 @@ void cMotion::eval_pos_vecs(float frame) {
 	}
 }
 
-__host__ __device__ void eval_sub(float* pRes, const float* pCoefs, float t, int n, int tid) {
+__host__ __device__
+#if 0
+void eval_sub(float* pRes, const float* pCoefs, float t, int n, int tid) {
 	const float* pRe = &pCoefs[tid * (n + n - 1)];
 	const float* pIm = &pRe[n];
 	float res = pRe[0];
@@ -507,6 +509,33 @@ __host__ __device__ void eval_sub(float* pRes, const float* pCoefs, float t, int
 	}
 	pRes[tid] = res;
 }
+#else
+// NR ed3: (5.4.6)
+void eval_sub(float* pRes, const float* pCoefs, float t, int n, int tid) {
+	const float* pRe = &pCoefs[tid * (n + n - 1)];
+	const float* pIm = &pRe[n];
+	float res = pRe[0];
+	float r = t;
+	float c = cosf(r);
+	float s = sinf(r);
+	float a = sinf(r*0.5f);
+	a = 2.0f * a*a;
+	float b = s;
+	float re = pRe[1];
+	float im = pIm[0];
+	res += re*c + im*s;
+	for (int i = 2; i < n; ++i) {
+		float ci = c - (a*c + b*s);
+		float si = s - (a*s - b*c);
+		re = pRe[i];
+		im = pIm[i - 1];
+		res += re*ci + im*si;
+		c = ci;
+		s = si;
+	}
+	pRes[tid] = res;
+}
+#endif
 
 void cMotion::eval_cpu(float frame) {
 	float* pCoefs = mpEvalCoefsCPU;

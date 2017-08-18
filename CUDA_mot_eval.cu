@@ -11,6 +11,8 @@
 #include <string.h>
 #include <math.h>
 
+#include <omp.h>
+
 #define WIN32_LEAN_AND_MEAN 1
 #define NOMINMAX
 #define _WIN32_WINNT 0x0601
@@ -73,7 +75,7 @@ MOT_QUAT motQuatExp(MOT_VEC v) {
 	q.y = v.y * s;
 	q.z = v.z * s;
 	q.w = cosf(ha);
-	s = 1.0f / sqrtf(q.x*q.x + q.y*q.y + q.z*q.z);
+	s = 1.0f / sqrtf(q.x*q.x + q.y*q.y + q.z*q.z + q.w*q.w);
 	q.x *= s;
 	q.y *= s;
 	q.z *= s;
@@ -288,6 +290,7 @@ public:
 	int get_nrot() const { return mRotChansNum; }
 	int get_npos() const { return mPosVecsNum; }
 	int get_ncut() const { return mCut; }
+	float* get_res_ptr() { return mpEvalResCPU; }
 
 	void clear_res() {
 		if (mpEvalResCPU) {
@@ -511,6 +514,7 @@ void cMotion::eval_cpu(float frame) {
 	if (!pCoefs || !pRes) return;
 	float t = frame_to_param(frame);
 	int n = mRotChansNum;
+//#pragma omp parallel for
 	for (int i = 0; i < n; ++i) {
 		eval_sub(pRes, pCoefs, t, mCut, i);
 	}
@@ -570,12 +574,28 @@ void init() {
 }
 
 
+double res_l2() {
+	double res = 0;
+	int n = s_mot.get_nrot();
+	float* p = s_mot.get_res_ptr();
+	if (p) {
+		for (int i = 0; i < n; ++i) {
+			res += p[i] * p[i];
+		}
+		res = sqrt(res);
+	}
+	return res;
+}
+
+
 int main() {
 	init();
 
 	const int N = 1000;
 	double cpuT = 0.0f;
 	double devT = 0.0f;
+	double devRes = 0.0;
+	double cpuRes = 0.0;
 	::printf("-----\n");
 
 	for (int i = 0; i < N; ++i) {
@@ -585,9 +605,11 @@ int main() {
 		int64_t devT1 = timestamp();
 		double devDT = (double)(devT1 - devT0);
 		devT += devDT;
+		devRes += res_l2();
 	}
 	devT /= N;
-	::printf("dev = %.1f\n", devT);
+	::printf("dev res = %.1f\n", devRes);
+	::printf("dev t = %.1f\n", devT);
 
 	s_mot.clear_res();
 
@@ -598,9 +620,11 @@ int main() {
 		int64_t cpuT1 = timestamp();
 		double cpuDT = (double)(cpuT1 - cpuT0);
 		cpuT += cpuDT;
+		cpuRes += res_l2();
 	}
 	cpuT /= N;
-	::printf("cpu = %.1f\n", cpuT);
+	::printf("cpu res = %.1f\n", cpuRes);
+	::printf("cpu t = %.1f\n", cpuT);
 
 	::printf("%f\n", cpuT / devT);
 

@@ -241,27 +241,10 @@ MOT_QUAT motQuatFromDegrees(float dx, float dy, float dz, E_MOT_RORD rord) {
 
 MOT_QUAT motQuatMul(const MOT_QUAT q1, const MOT_QUAT q2) {
 	MOT_QUAT q;
-	int i, j;
-	float t1[4][4] = {
-		{  q1.w,  q1.w,  q1.w,  q1.w },
-		{  q1.x,  q1.y,  q1.z, -q1.x },
-		{  q1.y,  q1.z,  q1.x, -q1.y },
-		{ -q1.z, -q1.x, -q1.y, -q1.z }
-	};
-	float t2[4][4] = {
-		{ q2.x, q2.y, q2.z, q2.w },
-		{ q2.w, q2.w, q2.w, q2.x },
-		{ q2.z, q2.x, q2.y, q2.y },
-		{ q2.y, q2.z, q2.x, q2.z }
-	};
-	for (i = 0; i < 4; ++i) {
-		q.s[i] = 0.0f;
-	}
-	for (i = 0; i < 4; ++i) {
-		for (j = 0; j < 4; ++j) {
-			q.s[j] += t1[i][j] * t2[i][j];
-		}
-	}
+	q.x = q1.w*q2.x + q1.x*q2.w + q1.y*q2.z - q1.z*q2.y;
+	q.y = q1.w*q2.y + q1.y*q2.w + q1.z*q2.x - q1.x*q2.z;
+	q.z = q1.w*q2.z + q1.z*q2.w + q1.x*q2.y - q1.y*q2.x;
+	q.w = q1.w*q2.w - q1.x*q2.x - q1.y*q2.y - q1.z*q2.z;
 	return q;
 }
 
@@ -315,8 +298,9 @@ MOT_QUAT motQuatSlerp(const MOT_QUAT q1, const MOT_QUAT q2, float t) {
 	r = 1.0f / sinc(ang);
 	s = sinc(ang*s) * r * s;
 	t = sinc(ang*t) * r * t;
+	t *= d;
 	for (i = 0; i < 4; ++i) {
-		q.s[i] = q1.s[i]*s + q2.s[i]*t*d;
+		q.s[i] = q1.s[i]*s + q2.s[i]*t;
 	}
 	return motQuatNormalize(q);
 }
@@ -578,6 +562,23 @@ static MOT_FRAME_INFO finfo(const MOT_CLIP* pClip, float frm) {
 }
 
 MOT_QUAT motEvalQuat(const MOT_CLIP* pClip, int nodeIdx, float frm) {
+	MOT_FRAME_INFO fi;
+	MOT_QUAT q = { 0.0f, 0.0f, 0.0f, 1.0f };
+	MOT_VEC v;
+	if (!pClip || !motNodeIdxCk(pClip, nodeIdx)) {
+		return q;
+	}
+	fi = finfo(pClip, frm);
+	v = motGetVec(pClip, nodeIdx, fi.fno, TRK_ROT);
+	if (fi.t != 0.0f) {
+		MOT_VEC vnext = motGetVec(pClip, nodeIdx, fi.next, TRK_ROT);
+		v = motVecLerp(v, vnext, fi.t);
+	}
+	q = motQuatExp(v);
+	return q;
+}
+
+MOT_QUAT motEvalQuatSlerp(const MOT_CLIP* pClip, int nodeIdx, float frm) {
 	MOT_FRAME_INFO fi;
 	MOT_QUAT q = { 0.0f, 0.0f, 0.0f, 1.0f };
 	if (!pClip || !motNodeIdxCk(pClip, nodeIdx)) {

@@ -102,6 +102,7 @@ MOT_EXTERN_FUNC MOT_QUAT motGetQuat(const MOT_CLIP* pClip, int nodeIdx, int fno)
 MOT_EXTERN_FUNC MOT_VEC motGetRadians(const MOT_CLIP* pClip, int nodeIdx, int fno);
 MOT_EXTERN_FUNC MOT_VEC motGetDegrees(const MOT_CLIP* pClip, int nodeIdx, int fno);
 MOT_EXTERN_FUNC MOT_QUAT motEvalQuat(const MOT_CLIP* pClip, int nodeIdx, float frm);
+MOT_EXTERN_FUNC MOT_QUAT motEvalQuatSlerp(const MOT_CLIP* pClip, int nodeIdx, float frm);
 MOT_EXTERN_FUNC MOT_VEC motEvalRadians(const MOT_CLIP* pClip, int nodeIdx, float frm);
 MOT_EXTERN_FUNC MOT_VEC motEvalDegrees(const MOT_CLIP* pClip, int nodeIdx, float frm);
 MOT_EXTERN_FUNC MOT_VEC motEvalPos(const MOT_CLIP* pClip, int nodeIdx, float frm);

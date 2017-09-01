@@ -49,7 +49,7 @@ void test() {
 	int nrot;
 	int nscl;
 	float frm;
-	int nsub = 1;
+	int nsub = 4;
 	FILE* pOut = NULL;
 	MOT_VEC* pRot = NULL;
 	MOT_MTX* pMtx = NULL;
@@ -72,7 +72,7 @@ void test() {
 			++nscl;
 		}
 	}
-	printf("motion clip: %s\n", pClip->name);
+	printf("motion clip: %s\n", pClip->name.chr);
 	printf("#frm: %d\n", nfrm);
 	printf("#pos tracks: %d\n", npos);
 	printf("#rot tracks: %d\n", nrot);
@@ -81,7 +81,7 @@ void test() {
 	pOut = fopen("../dump.clip", "w");
 
 	fprintf(pOut, "{\n");
-	fprintf(pOut, "  rate = %.1f\n", pClip->fps);
+	fprintf(pOut, "  rate = %.1f\n", pClip->rate);
 	fprintf(pOut, "  start = -1\n");
 	fprintf(pOut, "  tracklength = %d\n", nfrm * nsub);
 	fprintf(pOut, "  tracks = %d\n", nrot * 3);
@@ -110,7 +110,7 @@ void test() {
 			for (j = 0; j < 3; ++j) {
 				if (pOut) {
 					fprintf(pOut, "  {\n");
-					fprintf(pOut, "    name = %s:r%c\n", pClip->nodes[i].name, "xyz"[j]);
+					fprintf(pOut, "    name = %s:r%c\n", pClip->nodes[i].name.chr, "xyz"[j]);
 					fprintf(pOut, "    data =");
 					for (k = 0; k < nfrm * nsub; ++k) {
 						fprintf(pOut, " %f", pRot[k].s[j]);

@@ -10,13 +10,13 @@ using System.Globalization;
 using System.Collections.Generic;
 
 
-public enum eTrkKind {
+public enum TRK_KIND {
 	POS = 0,
 	ROT = 1,
 	SCL = 2
 }
 
-public enum eRotOrd {
+public enum ROT_ORD {
 	XYZ = 0,
 	XZY = 1,
 	YXZ = 2,
@@ -25,7 +25,7 @@ public enum eRotOrd {
 	ZYX = 5
 }
 
-public enum eXformOrd {
+public enum XFORM_ORD {
 	SRT = 0,
 	STR = 1,
 	RST = 2,
@@ -34,7 +34,7 @@ public enum eXformOrd {
 	TRS = 5
 }
 
-public enum eDumpMode {
+public enum DUMP_MODE {
 	DEFAULT,
 	LOGVECS,
 	QUATS
@@ -42,8 +42,10 @@ public enum eDumpMode {
 
 public static class DEFS {
 	public static int FIX_STR_SIZE = 0x40;
+	public static int CLIP_HEADER_SIZE = 0x20 + DEFS.FIX_STR_SIZE;
 	public static int NODE_INFO_SIZE = DEFS.FIX_STR_SIZE + 0x70;
 	public static uint MOT_CLIP_ID = nUtl.FOURCC('M', 'C', 'L', 'P');
+	public static uint MOT_LIB_ID = nUtl.FOURCC('M', 'L', 'I', 'B');
 }
 
 public struct QUAT {
@@ -95,7 +97,7 @@ public struct QUAT {
 	public void SetDY(float degrees) { SetRY(nUtl.DegToRad(degrees)); }
 	public void SetDZ(float degrees) { SetRZ(nUtl.DegToRad(degrees)); }
 		
-	public void SetR(float rx, float ry, float rz, eRotOrd ord) {
+	public void SetR(float rx, float ry, float rz, ROT_ORD ord) {
 		var tbl = new byte[] {
 			/* XYZ */ 0, 1, 2,
 			/* XZY */ 0, 2, 1,
@@ -121,11 +123,11 @@ public struct QUAT {
 		}
 	}
 		
-	public void SetD(float dx, float dy, float dz, eRotOrd ord) {
+	public void SetD(float dx, float dy, float dz, ROT_ORD ord) {
 		SetR(nUtl.DegToRad(dx), nUtl.DegToRad(dy), nUtl.DegToRad(dz), ord);
 	}
 	
-	public float[] GetR(eRotOrd ord) {
+	public float[] GetR(ROT_ORD ord) {
 		var rXYZ = new float[] { 0, 0, 0 };
 		int axisMask = 0;
 		const float eps = 1.0e-6f;
@@ -207,7 +209,7 @@ public struct QUAT {
 		return rXYZ;
 	}
 	
-	public float[] GetD(eRotOrd ord) {
+	public float[] GetD(ROT_ORD ord) {
 		float[] r = GetR(ord);
 		float s = nUtl.RadToDeg(1.0f);
 		for (int i = 0; i < 3; ++i) {
@@ -321,6 +323,150 @@ public struct VEC {
 	}
 }
 
+public class STR_LIST {
+	public List<string> mStr;
+	public List<int> mOrd;
+	public List<uint> mHash;
+
+	public STR_LIST() {
+		Reset();
+	}
+
+	public void Reset() {
+		mStr = new List<string>();
+		mOrd = new List<int>();
+		mHash = new List<uint>();
+	}
+
+	public int Count {
+		get {
+			return mStr.Count;
+		}
+	}
+
+	protected int FindSlot(uint h, int cnt) {
+		int org = 0;
+		int end = cnt;
+		do {
+			int mid = (org + end) / 2;
+			if (h < mHash[mid]) {
+				end = mid;
+			} else {
+				org = mid;
+			}
+		} while (end - org >= 2);
+		return org;
+	}
+
+	protected int FindSlot(uint h) {
+		return FindSlot(h, Count);
+	}
+
+	protected void Swap(int i0, int i1) {
+		string s = mStr[i0];
+		int i = mOrd[i0];
+		uint h = mHash[i0];
+		mStr[i0] = mStr[i1];
+		mOrd[i0] = mOrd[i1];
+		mHash[i0] = mHash[i1];
+		mStr[i1] = s;
+		mOrd[i1] = i;
+		mHash[i1] = h;
+	}
+
+	protected void Move(int dst, int src) {
+		mStr[dst] = mStr[src];
+		mOrd[dst] = mOrd[src];
+		mHash[dst] = mHash[src];
+	}
+
+	protected void Append(string s, int i, uint h) {
+		mStr.Add(s);
+		mOrd.Add(i);
+		mHash.Add(h);
+	}
+
+	protected void Store(int at, string s, int i, uint h) {
+		mStr[at] = s;
+		mOrd[at] = i;
+		mHash[at] = h;
+	}
+
+	protected uint Hash(string s) {
+		uint h = 2166136261U;
+		if (s != null) unchecked {
+				for (int i = 0; i < s.Length; ++i) {
+					h *= 16777619U;
+					h ^= (byte)s[i];
+				}
+			}
+		return h;
+	}
+
+	public void Add(string str) {
+		if (str == null) return;
+		uint h = Hash(str);
+		int ord = Count;
+		Append(str, ord, h);
+		if (ord > 0) {
+			int dst = FindSlot(h, ord);
+			if (dst == ord - 1) {
+				if (h < mHash[dst]) {
+					Swap(ord, ord - 1);
+				}
+			} else {
+				if (h < mHash[dst]) {
+					--dst;
+				}
+				for (int i = ord; --i >= dst + 1;) {
+					Move(i + 1, i);
+				}
+				Store(dst + 1, str, ord, h);
+			}
+		}
+	}
+
+	public int FindIdx(string s) {
+		int res = -1;
+		if (s != null && Count > 0) {
+			uint h = Hash(s);
+			int idx = FindSlot(h);
+			if (h == mHash[idx]) {
+				int nc = 1;
+				for (int i = idx; --i >= 0;) {
+					if (h != mHash[i]) break;
+					--idx;
+					++nc;
+				}
+				for (int i = 0; i < nc; ++i) {
+					if (mStr[idx + i] == s) return idx + i;
+				}
+			}
+		}
+		return res;
+	}
+
+	public int this[string s] => FindIdx(s);
+
+	public int FindOrd(string s) {
+		int idx = FindIdx(s);
+		if (idx >= 0) {
+			return mOrd[idx];
+		}
+		return -1;
+	}
+}
+
+public class EVAL_INFO {
+	public struct MAP {
+		public int node, chan, kind;
+	}
+
+	public int[] ntrk;
+	public int[] ncrv;
+	public MAP[] map; // [ curves<pos,rot,scl>[ncrv], consts<pos,rot,scl>[ntrk - ncrv] ]
+}
+
 
 public static class nUtl {
 
@@ -331,20 +477,20 @@ public static class nUtl {
 	public static float DegToRad(float deg) {
 		return ((deg * (float)Math.PI) / 180.0f);
 	}
-	
+
 	public static float LimitPI(float rad) {
 		const float pi = (float)Math.PI;
 		rad %= pi * 2;
 		if (Math.Abs(rad) > pi) {
 			if (rad < 0.0f) {
-				rad = pi*2 + rad;
+				rad = pi * 2 + rad;
 			} else {
-				rad = rad - pi*2;
+				rad = rad - pi * 2;
 			}
 		}
 		return rad;
 	}
-	
+
 	public static float Sinc(float x) {
 		if (Math.Abs(x) < 1.0e-4f) return 1.0f;
 		return (float)Math.Sin(x) / x;
@@ -354,9 +500,10 @@ public static class nUtl {
 		return (uint)((((byte)c4) << 24) | (((byte)c3) << 16) | (((byte)c2) << 8) | ((byte)c1));
 	}
 
-	public static void WritePaddedStr(BinaryWriter bw, string s) {
-		int slen = Math.Min(DEFS.FIX_STR_SIZE - 1, s.Length);
-		int pad = DEFS.FIX_STR_SIZE - slen;
+	public static void WriteFixStr(BinaryWriter bw, string s) {
+		int slen = Math.Min(DEFS.FIX_STR_SIZE - 2, s.Length);
+		int pad = DEFS.FIX_STR_SIZE - 1 - slen;
+		bw.Write((byte)s.Length);
 		for (int i = 0; i < slen; ++i) {
 			bw.Write((byte)s[i]);
 		}
@@ -385,7 +532,7 @@ public static class nUtl {
 			return -1;
 		}
 	}
-	
+
 	public static double ParseF64(string s) {
 		double d;
 		try {
@@ -396,17 +543,26 @@ public static class nUtl {
 		}
 		return d;
 	}
-	
+
 	public static float ParseF32(string s) {
 		return (float)ParseF64(s);
 	}
-	
+
 	public static string ReadStr(BinaryReader br) {
 		string s = "";
 		while (true) {
 			char c = (char)br.ReadByte();
 			if (c == 0) break;
 			s += c;
+		}
+		return s;
+	}
+
+	public static string ReadFixStr(BinaryReader br) {
+		int len = br.ReadByte();
+		string s = "";
+		for (int i = 0; i < len; ++i) {
+			s += (char)br.ReadByte();
 		}
 		return s;
 	}
@@ -601,7 +757,7 @@ public class cHouClip {
 
 	public 	string mPath = "<unknown>";
 	public 	string mName = "<unknown>";
-	public float mFPS;
+	public float mRate;
 	public int mStart;
 	public int mFramesNum;
 	public int mTracksNum;
@@ -676,7 +832,7 @@ public class cHouClip {
 			string s = toks[i++];
 			switch (t) {
 				case "rate":
-					mFPS = nUtl.ParseF32(s);
+					mRate = nUtl.ParseF32(s);
 					break;
 				case "start":
 					mStart = nUtl.ParseInt(s) + 1;
@@ -714,7 +870,7 @@ public class cMotClipWriter {
 
 	public class cTrack {
 		public cNode mNode;
-		public eTrkKind mKind;
+		public TRK_KIND mKind;
 		public cHouClip.cTrack mSrcX;
 		public cHouClip.cTrack mSrcY;
 		public cHouClip.cTrack mSrcZ;
@@ -724,7 +880,7 @@ public class cMotClipWriter {
 		public byte mSrcMask;
 		public byte mDataMask;
 		
-		public cTrack(cNode node, eTrkKind kind) {
+		public cTrack(cNode node, TRK_KIND kind) {
 			mNode = node;
 			mKind = kind;
 			string ks = "" + "trs"[(int)mKind];
@@ -742,7 +898,7 @@ public class cMotClipWriter {
 					mData[i].y = GetRawY(i);
 					mData[i].z = GetRawZ(i);
 				}
-				if (mKind == eTrkKind.ROT) {
+				if (mKind == TRK_KIND.ROT) {
 					var tq = new QUAT[nfrm];
 					for (int i = 0; i < nfrm; ++i) {
 						tq[i].SetD(mData[i].x, mData[i].y, mData[i].z, mNode.mRotOrd);
@@ -823,35 +979,35 @@ public class cMotClipWriter {
 		public cTrack mPosTrk;
 		public cTrack mRotTrk;
 		public cTrack mSclTrk;
-		public eXformOrd mXformOrd;
-		public eRotOrd mRotOrd;
-		
+		public XFORM_ORD mXformOrd;
+		public ROT_ORD mRotOrd;
+
 		public cNode(cMotClipWriter clip, string name) {
 			mClip = clip;
 			mName = name;
-			mXformOrd = eXformOrd.SRT;
+			mXformOrd = XFORM_ORD.SRT;
 			cHouClip.cTrack xOrdTrk = mClip.mSrc.FindTrack(mName, "xOrd");
 			if (xOrdTrk != null) {
 				if (!xOrdTrk.IsConst) {
 					Console.Error.WriteLine("Node {0}: animated xOrd.");
 				}
-				mXformOrd = (eXformOrd)xOrdTrk.GetVal(0);
+				mXformOrd = (XFORM_ORD)xOrdTrk.GetVal(0);
 			}
-			mRotOrd = eRotOrd.XYZ;
+			mRotOrd = ROT_ORD.XYZ;
 			cHouClip.cTrack rOrdTrk = mClip.mSrc.FindTrack(mName, "rOrd");
 			if (rOrdTrk != null) {
 				if (!rOrdTrk.IsConst) {
 					Console.Error.WriteLine("Node {0}: animated rOrd.");
 				}
-				mRotOrd = (eRotOrd)rOrdTrk.GetVal(0);
+				mRotOrd = (ROT_ORD)rOrdTrk.GetVal(0);
 			}
-			mPosTrk = new cTrack(this, eTrkKind.POS);
-			mRotTrk = new cTrack(this, eTrkKind.ROT);
-			mSclTrk = new cTrack(this, eTrkKind.SCL);
+			mPosTrk = new cTrack(this, TRK_KIND.POS);
+			mRotTrk = new cTrack(this, TRK_KIND.ROT);
+			mSclTrk = new cTrack(this, TRK_KIND.SCL);
 		}
 		
 		public void WriteInfo(BinaryWriter bw) {
-			nUtl.WritePaddedStr(bw, mName);
+			nUtl.WriteFixStr(bw, mName);
 			bw.Write((uint)0); // +40 -> pos
 			bw.Write((uint)0); // +44 -> rot
 			bw.Write((uint)0); // +48 -> scl
@@ -885,6 +1041,7 @@ public class cMotClipWriter {
 	}
 
 	public cHouClip mSrc;
+	public STR_LIST mNodeNamesLst;
 	public List<string> mNodeNames;
 	public cNode[] mNodes;
 	
@@ -895,6 +1052,8 @@ public class cMotClipWriter {
 		mNodes = new cNode[n];
 		for (int i = 0; i < n; ++i) {
 			mNodes[i] = new cNode(this, mNodeNames[i]);
+		}
+		for (int i = 0; i < n; ++i) {
 		}
 	}
 	
@@ -922,41 +1081,55 @@ public class cMotClipWriter {
 		get {
 			float rate = 30.0f;
 			if (mSrc != null) {
-				rate = mSrc.mFPS;
+				rate = mSrc.mRate;
 			}
 			return rate;
 		}
 	}
 
 	protected void GetNodeNames() {
-		mNodeNames = new List<string>();
+		var names = new List<string>();
 		int ntrk = mSrc.mTracksNum;
 		for (int i = 0; i < ntrk; ++i) {
 			cHouClip.cTrack strk = mSrc.mTracks[i];
 			string name = strk.ShortName;
-			if (!mNodeNames.Contains(name)) {
-				mNodeNames.Add(name);
+			if (!names.Contains(name)) {
+				names.Add(name);
 			}
 		}
+		mNodeNamesLst = new STR_LIST();
+		foreach (string name in names) {
+			mNodeNamesLst.Add(name);
+		}
+		mNodeNames = mNodeNamesLst.mStr;
 	}
-	
+
 	public void Write(BinaryWriter bw) {
-		bw.Write(DEFS.MOT_CLIP_ID);
-		bw.Write(FPS);
-		bw.Write(FrameCount);
 		int n = NumNodes;
-		bw.Write(n);
-		nUtl.WritePaddedStr(bw, mSrc.mName);
+		/* +00 */ bw.Write(DEFS.MOT_CLIP_ID);
+		/* +04 */ bw.Write((uint)0); // size
+		/* +08 */ bw.Write(FPS);
+		/* +0C */ bw.Write(FrameCount);
+		/* +10 */ bw.Write(n);
+		/* +14 */ bw.Write((uint)0); // -> hash
+		/* +18 */ bw.Write((uint)0); // -> ext
+		/* +1C */ bw.Write((uint)0); // padding
+		nUtl.WriteFixStr(bw, mSrc.mName);
 		long[] nodeTop = new long[n];
 		for (int i = 0; i < n; ++i) {
 			cNode node = mNodes[i];
 			nodeTop[i] = bw.BaseStream.Position;
 			node.WriteInfo(bw);
 		}
+		nUtl.PatchWithCurrPos32(bw, 0x14); // <- hash
+		for (int i = 0; i < n; ++i) {
+			bw.Write(mNodeNamesLst.mHash[i]);
+		}
 		for (int i = 0; i < n; ++i) {
 			cNode node = mNodes[i];
 			node.WriteData(bw, nodeTop[i] + 0x40);
 		}
+		nUtl.PatchWithCurrPos32(bw, 0x4); // size
 	}
 
 	public void Save(string fpath) {
@@ -1027,8 +1200,8 @@ public class cMotClipReader {
 		public uint mOffsPos;
 		public uint mOffsRot;
 		public uint mOffsScl;
-		public eXformOrd mXformOrd;
-		public eRotOrd mRotOrd;
+		public XFORM_ORD mXformOrd;
+		public ROT_ORD mRotOrd;
 		public cTrack mPosTrk;
 		public cTrack mRotTrk;
 		public cTrack mSclTrk;
@@ -1039,13 +1212,13 @@ public class cMotClipReader {
 		
 		public void ReadInfo(BinaryReader br) {
 			mFileTop = br.BaseStream.Position;
-			mName = nUtl.ReadStr(br);
+			mName = nUtl.ReadFixStr(br);
 			br.BaseStream.Seek(mFileTop + DEFS.FIX_STR_SIZE, SeekOrigin.Begin);
 			mOffsPos = br.ReadUInt32();
 			mOffsRot = br.ReadUInt32();
 			mOffsScl = br.ReadUInt32();
-			mXformOrd = (eXformOrd)br.ReadByte();
-			mRotOrd = (eRotOrd)br.ReadByte();
+			mXformOrd = (XFORM_ORD)br.ReadByte();
+			mRotOrd = (ROT_ORD)br.ReadByte();
 			br.ReadByte();
 			br.ReadByte();
 			mPosTrk = new cTrack(this);
@@ -1134,9 +1307,11 @@ public class cMotClipReader {
 	}
 
 	public long mFileTop;
-	public float mFPS;
+	public uint mDataSize;
+	public float mRate;
 	public int mFramesNum;
 	public int mNodesNum;
+	public int mHashesOffs;
 	public string mName;
 	public cNode[] mNodes;
 	public Dictionary<string, int> mNodeMap;
@@ -1165,18 +1340,22 @@ public class cMotClipReader {
 
 	public void Read(BinaryReader br) {
 		mFileTop = br.BaseStream.Position;
-		uint id = br.ReadUInt32();
-		if (id != DEFS.MOT_CLIP_ID) {
+		uint fmt = br.ReadUInt32();
+		if (fmt != DEFS.MOT_CLIP_ID) {
 			throw new Exception("!MotClip");
 		}
-		mFPS = br.ReadSingle();
+		mDataSize = br.ReadUInt32();
+		mRate = br.ReadSingle();
 		mFramesNum = br.ReadInt32();
 		mNodesNum = br.ReadInt32();
-		mName = nUtl.ReadStr(br);
+		mHashesOffs = br.ReadInt32();
+		br.ReadInt32(); // ext
+		br.ReadInt32(); // pad
+		mName = nUtl.ReadFixStr(br);
 		mNodes = new cNode[mNodesNum];
 		mNodeMap = new Dictionary<string, int>();
 		for (int i = 0; i < mNodesNum; ++i) {
-			br.BaseStream.Seek(0x10 + DEFS.FIX_STR_SIZE + (i*DEFS.NODE_INFO_SIZE), SeekOrigin.Begin);
+			br.BaseStream.Seek(DEFS.CLIP_HEADER_SIZE + (i*DEFS.NODE_INFO_SIZE), SeekOrigin.Begin);
 			mNodes[i] = new cNode(this);
 			mNodes[i].ReadInfo(br);
 			string nodeName = mNodes[i].mName;
@@ -1270,18 +1449,18 @@ public class cMotClipReader {
 		}
 	}
 	
-	public void DumpClip(TextWriter tw, eDumpMode mode) {
+	public void DumpClip(TextWriter tw, DUMP_MODE mode) {
 		if (mNodes == null) return;
 		int ntrk = 0;
 		foreach (cNode node in mNodes) {
 			if (node.mRotTrk != null) {
 				switch (mode) {
-					case eDumpMode.QUATS:
+					case DUMP_MODE.QUATS:
 						if (node.mRotTrk.mSrcMask != 0) {
 							ntrk += 4;
 						}
 						break;
-					case eDumpMode.LOGVECS:
+					case DUMP_MODE.LOGVECS:
 						if (node.mRotTrk.mSrcMask != 0) {
 							ntrk += 3;
 						}
@@ -1296,16 +1475,16 @@ public class cMotClipReader {
 			}
 		}
 		tw.WriteLine(@"{");
-		tw.WriteLine("   rate = {0}", mFPS);
+		tw.WriteLine("   rate = {0}", mRate);
 		tw.WriteLine("   start = {0}", -1);
 		tw.WriteLine("   tracklength = {0}", mFramesNum);
 		tw.WriteLine("   tracks = {0}", ntrk);
 		foreach (cNode node in mNodes) {
 			switch (mode) {
-				case eDumpMode.LOGVECS:
+				case DUMP_MODE.LOGVECS:
 					DumpLogVecs(tw, node);
 					break;
-				case eDumpMode.QUATS:
+				case DUMP_MODE.QUATS:
 					DumpQuats(tw, node);
 					break;
 				default:
@@ -1318,7 +1497,69 @@ public class cMotClipReader {
 	}
 	
 	public void DumpClip(TextWriter tw) {
-		DumpClip(tw, eDumpMode.DEFAULT);
+		DumpClip(tw, DUMP_MODE.DEFAULT);
+	}
+}
+
+
+public class cMotLibWriter {
+
+	public class cEntry {
+		public cMotLibWriter mLib;
+		public string mSrcPath;
+		public cHouClip mHouClip;
+		public cMotClipWriter mMotClip;
+		
+		public cEntry(cMotLibWriter lib, string fpath) {
+			mSrcPath = fpath;
+			mHouClip = new cHouClip();
+			mHouClip.Load(fpath);
+			mMotClip = new cMotClipWriter(mHouClip);
+		}
+	}
+
+	public List<cEntry> mEntries;
+	public Dictionary<string, int> mPathToIdx;
+	public List<string> mNodeNames;
+	public Dictionary<string, int> mNodeMap;
+	
+	public cMotLibWriter() {
+		mEntries = new List<cEntry>();
+		mPathToIdx = new Dictionary<string, int>();
+		mNodeNames = new List<string>();
+		mNodeMap = new Dictionary<string, int>();
+	}
+
+	public void AddHouClip(string fpath) {
+		if (mPathToIdx.ContainsKey(fpath)) {
+			throw new Exception("motlib: clip dup.");
+		}
+		var entry = new cEntry(this, fpath);
+		int clipIdx = mEntries.Count;
+		mPathToIdx[fpath] = clipIdx;
+		mEntries.Add(entry);
+		foreach (string nodeName in entry.mMotClip.mNodeNames) {
+			if (!mNodeMap.ContainsKey(nodeName)) {
+				int nodeNameIdx = mNodeNames.Count;
+				mNodeMap[nodeName] = nodeNameIdx;
+				mNodeNames.Add(nodeName);
+			}
+		}
+	}
+	
+	public void Write(BinaryWriter bw) {
+		int nclips = mEntries.Count;
+		int nnodes = mNodeNames.Count;
+		bw.Write(DEFS.MOT_LIB_ID);
+		bw.Write(nclips);
+		bw.Write(nnodes);
+	}
+	
+	public void Save(string fpath) {
+		var ofs = new FileStream(fpath, FileMode.Create);
+		var bw = new BinaryWriter(ofs);
+		Write(bw);
+		bw.Close();
 	}
 }
 
@@ -1326,7 +1567,7 @@ public class cMotClipReader {
 public class HClipTool {
 	
 	private static void PrintClipInfo(cHouClip clip, TextWriter tw) {
-		tw.WriteLine("FPS: {0}", clip.mFPS);
+		tw.WriteLine("FPS: {0}", clip.mRate);
 		int nfrm = clip.mFramesNum;
 		int ntrk = clip.mTracksNum;
 		tw.WriteLine("#frames = {0}, #tracks = {1}", nfrm, ntrk);
@@ -1338,12 +1579,12 @@ public class HClipTool {
 
 	public static int Main(string[] argStrs) {
 		Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
-		
+
 		cArgs args = new cArgs();
 		args.Parse(argStrs);
 		
 		if (args.ArgNum < 1) {
-			Console.Error.WriteLine("hclip <motion.clip>");
+			Console.Error.WriteLine("hclip -[logvecs|quads] <motion.clip>");
 			return -1;
 		}
 		
@@ -1355,20 +1596,20 @@ public class HClipTool {
 		var mcw = new cMotClipWriter(clip);
 		string motPath = clpPath.Replace(".clip", ".mclp");
 		mcw.Save(motPath);
-		
+
+	
 		var mcr = new cMotClipReader();
 		mcr.Load(motPath);
 		
-		eDumpMode dumpMode = eDumpMode.DEFAULT;
+		DUMP_MODE dumpMode = DUMP_MODE.DEFAULT;
 		if (args.HasOption("logvecs")) {
-			dumpMode = eDumpMode.LOGVECS;
+			dumpMode = DUMP_MODE.LOGVECS;
 		} else if (args.HasOption("quats")) {
-			dumpMode = eDumpMode.QUATS;
+			dumpMode = DUMP_MODE.QUATS;
 		}
 		mcr.DumpClip(Console.Out, dumpMode);
 		
 		return 0;
 	}
-
 
 }

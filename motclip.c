@@ -432,7 +432,7 @@ int motFindNode(const MOT_CLIP* pClip, const char* pName) {
 		int i;
 		int n = pClip->nnod;
 		for (i = 0; i < n; ++i) {
-			if (strcmp(pClip->nodes[i].name, pName) == 0) {
+			if (strcmp(pClip->nodes[i].name.chr, pName) == 0) {
 				idx = i;
 				break;
 			}

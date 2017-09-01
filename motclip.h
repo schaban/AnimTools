@@ -22,7 +22,10 @@ typedef enum _E_MOT_TRK { TRK_POS, TRK_ROT, TRK_SCL } E_MOT_TRK;
 typedef enum _E_MOT_RORD { RORD_XYZ, RORD_XZY, RORD_YXZ, RORD_YZX, RORD_ZXY, RORD_ZYX } E_MOT_RORD;
 typedef enum _E_MOT_XORD { XORD_SRT, XORD_STR, XORD_RST, XORD_RTS, XORD_TSR, XORD_TRS } E_MOT_XORD;
 
-typedef char MOT_STRING[0x40];
+typedef struct _MOT_STRING {
+	uint8_t len;
+	char    chr[0x40-1];
+} MOT_STRING;
 
 typedef float MOT_MTX[4][4];
 
@@ -54,12 +57,16 @@ typedef struct _MOT_NODE {
 } MOT_NODE;
 
 typedef struct _MOT_CLIP {
-	char fmt[4];
-	float fps;
-	uint32_t nfrm;
-	uint32_t nnod;
+	char       fmt[4];
+	uint32_t   size;
+	float      rate;
+	uint32_t   nfrm;
+	uint32_t   nnod;
+	uint32_t   hash;
+	uint32_t   ext;
+	uint32_t   pad;
 	MOT_STRING name;
-	MOT_NODE nodes[1];
+	MOT_NODE   nodes[1];
 } MOT_CLIP;
 
 MOT_EXTERN_DATA const char g_motClipFmt[4];

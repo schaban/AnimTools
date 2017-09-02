@@ -49,11 +49,11 @@ typedef struct _MOT_TRACK {
 
 typedef struct _MOT_NODE {
 	MOT_STRING name;
-	uint32_t offs[3];
-	uint8_t xord;
-	uint8_t rord;
-	uint8_t reserved[2];
-	MOT_TRACK trk[3];
+	uint32_t   offs[3];
+	uint8_t    xord;
+	uint8_t    rord;
+	uint8_t    reserved[2];
+	MOT_TRACK  trk[3];
 } MOT_NODE;
 
 typedef struct _MOT_CLIP {
@@ -94,10 +94,10 @@ MOT_EXTERN_FUNC MOT_VEC motQuatToRadians(const MOT_QUAT q, E_MOT_RORD rord);
 MOT_EXTERN_FUNC MOT_VEC motQuatToDegrees(const MOT_QUAT q, E_MOT_RORD rord);
 
 MOT_EXTERN_FUNC int motClipHeaderCk(const MOT_CLIP* pClip);
-MOT_EXTERN_FUNC int motNodeIdxCk(const MOT_CLIP* pClip, int nodeIdx);
+MOT_EXTERN_FUNC int motClipNodeIdxCk(const MOT_CLIP* pClip, int nodeIdx);
 MOT_EXTERN_FUNC int motFrameNoCk(const MOT_CLIP* pClip, int fno);
 MOT_EXTERN_FUNC int motNodeTrackCk(const MOT_CLIP* pClip, int nodeIdx, E_MOT_TRK trk);
-MOT_EXTERN_FUNC int motFindNode(const MOT_CLIP* pClip, const char* pName);
+MOT_EXTERN_FUNC int motFindClipNode(const MOT_CLIP* pClip, const char* pName);
 MOT_EXTERN_FUNC float* motGetTrackData(const MOT_CLIP* pClip, int nodeIdx, E_MOT_TRK trk);
 MOT_EXTERN_FUNC void motGetChanData(const MOT_CLIP* pClip, int nodeIdx, E_MOT_TRK trk, int chIdx, float** ppData, int* pStride);
 MOT_EXTERN_FUNC E_MOT_RORD motGetRotOrd(const MOT_CLIP* pClip, int nodeIdx);

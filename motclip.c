@@ -402,7 +402,7 @@ int motClipHeaderCk(const MOT_CLIP* pClip) {
 	return 1;
 }
 
-int motNodeIdxCk(const MOT_CLIP* pClip, int nodeIdx) {
+int motClipNodeIdxCk(const MOT_CLIP* pClip, int nodeIdx) {
 	return !!(pClip && ((uint32_t)nodeIdx < pClip->nnod));
 }
 
@@ -412,7 +412,7 @@ int motFrameNoCk(const MOT_CLIP* pClip, int fno) {
 
 int motNodeTrackCk(const MOT_CLIP* pClip, int nodeIdx, E_MOT_TRK trk) {
 	int res = 0;
-	if (pClip && motNodeIdxCk(pClip, nodeIdx)) {
+	if (pClip && motClipNodeIdxCk(pClip, nodeIdx)) {
 		switch (trk) {
 			case TRK_POS:
 			case TRK_ROT:
@@ -426,15 +426,69 @@ int motNodeTrackCk(const MOT_CLIP* pClip, int nodeIdx, E_MOT_TRK trk) {
 	return res;
 }
 
-int motFindNode(const MOT_CLIP* pClip, const char* pName) {
+static uint32_t strhash(uint32_t* pLen, const char* pStr) {
+	uint32_t c;
+	uint32_t len = 0;
+	uint32_t h = 2166136261U;
+	while (c = *pStr++) {
+		h *= 16777619U;
+		h ^= c;
+		++len;
+	}
+	*pLen = len;
+	return h;
+}
+
+static int hfind(const uint32_t* pHashes, int n, uint32_t h) {
+	const uint32_t* p = pHashes;
+	uint32_t cnt = (uint32_t)n;
+	while (cnt > 1) {
+		uint32_t mid = cnt / 2;
+		const uint32_t* pm = &p[mid];
+		uint32_t ck = *pm;
+		p = (h < ck) ? p : pm;
+		cnt -= mid;
+	}
+	return (int)(p - pHashes) + ((p != pHashes) & (*p > h));
+}
+
+int motFindClipNode(const MOT_CLIP* pClip, const char* pName) {
 	int idx = -1;
+	const int binSearchThreshold = 20;
 	if (pClip && pName) {
 		int i;
 		int n = pClip->nnod;
-		for (i = 0; i < n; ++i) {
-			if (strcmp(pClip->nodes[i].name.chr, pName) == 0) {
-				idx = i;
-				break;
+		if (n > binSearchThreshold && pClip->hash) {
+			uint32_t len;
+			uint32_t h = strhash(&len, pName);
+			if ((size_t)len < sizeof(MOT_STRING) - 2) {
+				uint32_t* pHashes = (uint32_t*)((uint8_t*)pClip + pClip->hash);
+				int hidx = hfind(pHashes, n, h);
+				if (h == pHashes[hidx]) {
+					int nc = 1;
+					for (i = hidx; --i >= 0;) {
+						if (pHashes[i] != h) break;
+						--idx;
+						++nc;
+					}
+					for (int i = 0; i < nc; ++i) {
+						int tidx = hidx + i;
+						const MOT_NODE* pNode = &pClip->nodes[tidx];
+						if (len == pNode->name.len) {
+							if (memcmp(pNode->name.chr, pName, len) == 0) {
+								idx = tidx;
+								break;
+							}
+						}
+					}
+				}
+			}
+		} else {
+			for (i = 0; i < n; ++i) {
+				if (strcmp(pClip->nodes[i].name.chr, pName) == 0) {
+					idx = i;
+					break;
+				}
 			}
 		}
 	}
@@ -443,7 +497,7 @@ int motFindNode(const MOT_CLIP* pClip, const char* pName) {
 
 float* motGetTrackData(const MOT_CLIP* pClip, int nodeIdx, E_MOT_TRK trk) {
 	float* p = NULL;
-	if (pClip && motNodeIdxCk(pClip, nodeIdx)) {
+	if (pClip && motClipNodeIdxCk(pClip, nodeIdx)) {
 		int itrk = (int)trk;
 		if (itrk < 3) {
 			uint32_t offs = pClip->nodes[nodeIdx].offs[itrk];
@@ -481,16 +535,16 @@ void motGetChanData(const MOT_CLIP* pClip, int nodeIdx, E_MOT_TRK trk, int chIdx
 }
 
 E_MOT_RORD motGetRotOrd(const MOT_CLIP* pClip, int nodeIdx) {
-	return motNodeIdxCk(pClip, nodeIdx) ? (E_MOT_RORD)pClip->nodes[nodeIdx].rord : RORD_XYZ;
+	return motClipNodeIdxCk(pClip, nodeIdx) ? (E_MOT_RORD)pClip->nodes[nodeIdx].rord : RORD_XYZ;
 }
 
 E_MOT_XORD motGetXformOrd(const MOT_CLIP* pClip, int nodeIdx) {
-	return motNodeIdxCk(pClip, nodeIdx) ? (E_MOT_XORD)pClip->nodes[nodeIdx].xord : XORD_SRT;
+	return motClipNodeIdxCk(pClip, nodeIdx) ? (E_MOT_XORD)pClip->nodes[nodeIdx].xord : XORD_SRT;
 }
 
 MOT_VEC motGetVec(const MOT_CLIP* pClip, int nodeIdx, int fno, E_MOT_TRK trk) {
 	MOT_VEC v = {0.0f, 0.0f, 0.0f};
-	if (pClip && motNodeIdxCk(pClip, nodeIdx) && motFrameNoCk(pClip, fno)) {
+	if (pClip && motClipNodeIdxCk(pClip, nodeIdx) && motFrameNoCk(pClip, fno)) {
 		int i;
 		float* p = motGetTrackData(pClip, nodeIdx, trk);
 		if (p) {
@@ -565,7 +619,7 @@ MOT_QUAT motEvalQuat(const MOT_CLIP* pClip, int nodeIdx, float frm) {
 	MOT_FRAME_INFO fi;
 	MOT_QUAT q = { 0.0f, 0.0f, 0.0f, 1.0f };
 	MOT_VEC v;
-	if (!pClip || !motNodeIdxCk(pClip, nodeIdx)) {
+	if (!pClip || !motClipNodeIdxCk(pClip, nodeIdx)) {
 		return q;
 	}
 	fi = finfo(pClip, frm);
@@ -581,7 +635,7 @@ MOT_QUAT motEvalQuat(const MOT_CLIP* pClip, int nodeIdx, float frm) {
 MOT_QUAT motEvalQuatSlerp(const MOT_CLIP* pClip, int nodeIdx, float frm) {
 	MOT_FRAME_INFO fi;
 	MOT_QUAT q = { 0.0f, 0.0f, 0.0f, 1.0f };
-	if (!pClip || !motNodeIdxCk(pClip, nodeIdx)) {
+	if (!pClip || !motClipNodeIdxCk(pClip, nodeIdx)) {
 		return q;
 	}
 	fi = finfo(pClip, frm);
@@ -604,7 +658,7 @@ MOT_VEC motEvalDegrees(const MOT_CLIP* pClip, int nodeIdx, float frm) {
 MOT_VEC motEvalPos(const MOT_CLIP* pClip, int nodeIdx, float frm) {
 	MOT_FRAME_INFO fi;
 	MOT_VEC v = { 0.0f, 0.0f, 0.0f };
-	if (!pClip || !motNodeIdxCk(pClip, nodeIdx)) {
+	if (!pClip || !motClipNodeIdxCk(pClip, nodeIdx)) {
 		return v;
 	}
 	fi = finfo(pClip, frm);
@@ -619,7 +673,7 @@ MOT_VEC motEvalPos(const MOT_CLIP* pClip, int nodeIdx, float frm) {
 MOT_VEC motEvalScl(const MOT_CLIP* pClip, int nodeIdx, float frm) {
 	MOT_FRAME_INFO fi;
 	MOT_VEC v = { 1.0f, 1.0f, 1.0f };
-	if (!pClip || !motNodeIdxCk(pClip, nodeIdx)) {
+	if (!pClip || !motClipNodeIdxCk(pClip, nodeIdx)) {
 		return v;
 	}
 	fi = finfo(pClip, frm);
@@ -637,7 +691,7 @@ void motEvalTransform(MOT_MTX* pMtx, const MOT_CLIP* pClip, int nodeIdx, float f
 	MOT_VEC s;
 	E_MOT_XORD xord;
 	int srt = 0;
-	if (!pMtx || !pClip || !motNodeIdxCk(pClip, nodeIdx)) return;
+	if (!pMtx || !pClip || !motClipNodeIdxCk(pClip, nodeIdx)) return;
 	xord = motGetXformOrd(pClip, nodeIdx);
 	if (motNodeTrackCk(pClip, nodeIdx, TRK_POS)) srt |= 1;
 	if (motNodeTrackCk(pClip, nodeIdx, TRK_ROT)) srt |= 2;

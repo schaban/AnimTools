@@ -459,12 +459,42 @@ public class STR_LIST {
 
 public class EVAL_INFO {
 	public struct MAP {
-		public int node, chan, kind;
+		public int node;
+		public TRK_KIND kind;
+		public int chan;
+
+		public void Write(BinaryWriter bw) {
+			bw.Write((ushort)node);
+			bw.Write((byte)kind);
+			bw.Write((byte)chan);
+		}
+
+		public override string ToString() => $"node{node:D2} {kind}[{chan}]";
 	}
 
 	public int[] ntrk;
+	public int[] nchn;
 	public int[] ncrv;
-	public MAP[] map; // [ curves<pos,rot,scl>[ncrv], consts<pos,rot,scl>[ntrk - ncrv] ]
+	public MAP[] map; // [ curves<pos,rot,scl>[ncrv], consts<pos,rot,scl>[nchn - ncrv] ]
+
+	public EVAL_INFO() {
+		ntrk = new int[3];
+		nchn = new int[3];
+		ncrv = new int[3];
+	}
+
+	public void AllocMap() {
+		int n = 0;
+		foreach (int nc in nchn) n += nc;
+		map = new MAP[n];
+	}
+
+	public void Write(BinaryWriter bw) {
+		foreach (int n in ntrk) bw.Write(n);
+		foreach (int n in nchn) bw.Write(n);
+		foreach (int n in ncrv) bw.Write(n);
+		foreach (MAP m in map) m.Write(bw);
+	}
 }
 
 
@@ -944,7 +974,34 @@ public class cMotClipWriter {
 		public float GetRawX(int frm) { return (mSrcX != null) ? mSrcX.GetVal(frm) : 0.0f; }
 		public float GetRawY(int frm) { return (mSrcY != null) ? mSrcY.GetVal(frm) : 0.0f; }
 		public float GetRawZ(int frm) { return (mSrcZ != null) ? mSrcZ.GetVal(frm) : 0.0f; }
-		
+
+		public int NumChannels {
+			get {
+				int n = 0;
+				for (int i = 0; i < 3; ++i) {
+					if ((mSrcMask & (1 << i)) != 0) {
+						++n;
+					}
+				}
+				return n;
+			}
+		}
+
+		public int NumCurves {
+			get {
+				int n = 0;
+				for (int i = 0; i < 3; ++i) {
+					if ((mDataMask & (1<<i)) != 0) {
+						++n;
+					}
+				}
+				return n;
+			}
+		}
+
+		public int NumConts => NumChannels - NumCurves;
+
+
 		public void WriteInfo(BinaryWriter bw) {
 			mMin.Write(bw); // +00
 			mMax.Write(bw); // +0C
@@ -1034,6 +1091,16 @@ public class cMotClipWriter {
 				mSclTrk.WriteData(bw);
 			}
 		}
+
+		public cTrack GetTrack(TRK_KIND kind) {
+			cTrack trk = null;
+			switch (kind) {
+				case TRK_KIND.POS: trk = mPosTrk; break;
+				case TRK_KIND.ROT: trk = mRotTrk; break;
+				case TRK_KIND.SCL: trk = mSclTrk; break;
+			}
+			return trk;
+		}
 		
 		public override string ToString() {
 			return String.Format("{0}", mName);
@@ -1044,7 +1111,8 @@ public class cMotClipWriter {
 	public STR_LIST mNodeNamesLst;
 	public List<string> mNodeNames;
 	public cNode[] mNodes;
-	
+	public EVAL_INFO mEvalInfo;
+
 	public cMotClipWriter(cHouClip src) {
 		mSrc = src;
 		GetNodeNames();
@@ -1053,7 +1121,45 @@ public class cMotClipWriter {
 		for (int i = 0; i < n; ++i) {
 			mNodes[i] = new cNode(this, mNodeNames[i]);
 		}
+		mEvalInfo = new EVAL_INFO();
 		for (int i = 0; i < n; ++i) {
+			if (mNodes[i].mPosTrk.mSrcMask != 0) {
+				++mEvalInfo.ntrk[(int)TRK_KIND.POS];
+			}
+			if (mNodes[i].mRotTrk.mSrcMask != 0) {
+				++mEvalInfo.ntrk[(int)TRK_KIND.ROT];
+			}
+			if (mNodes[i].mSclTrk.mSrcMask != 0) {
+				++mEvalInfo.ntrk[(int)TRK_KIND.SCL];
+			}
+
+			mEvalInfo.nchn[(int)TRK_KIND.POS] += mNodes[i].mPosTrk.NumChannels;
+			mEvalInfo.nchn[(int)TRK_KIND.ROT] += mNodes[i].mRotTrk.NumChannels;
+			mEvalInfo.nchn[(int)TRK_KIND.SCL] += mNodes[i].mSclTrk.NumChannels;
+
+			mEvalInfo.ncrv[(int)TRK_KIND.POS] += mNodes[i].mPosTrk.NumCurves;
+			mEvalInfo.ncrv[(int)TRK_KIND.ROT] += mNodes[i].mRotTrk.NumCurves;
+			mEvalInfo.ncrv[(int)TRK_KIND.SCL] += mNodes[i].mSclTrk.NumCurves;
+		}
+		mEvalInfo.AllocMap();
+		int mapIdx = 0;
+		var tkinds = new TRK_KIND[] { TRK_KIND.POS, TRK_KIND.ROT, TRK_KIND.SCL };
+		for (int bit = 0; bit < 2; ++bit) {
+			foreach (var kind in tkinds) {
+				for (int inod = 0; inod < n; ++inod) {
+					cTrack trk = mNodes[inod].GetTrack(kind);
+					for (int ichn = 0; ichn < 3; ++ichn) {
+						bool dataFlg = ((trk.mDataMask >> ichn) & 1) != bit;
+						bool srcFlg = (trk.mSrcMask & (1 << ichn)) != 0;
+						if (srcFlg && dataFlg) {
+							mEvalInfo.map[mapIdx].node = inod;
+							mEvalInfo.map[mapIdx].chan = ichn;
+							mEvalInfo.map[mapIdx].kind = kind;
+							++mapIdx;
+						}
+					}
+				}
+			}
 		}
 	}
 	
@@ -1112,7 +1218,7 @@ public class cMotClipWriter {
 		/* +0C */ bw.Write(FrameCount);
 		/* +10 */ bw.Write(n);
 		/* +14 */ bw.Write((uint)0); // -> hash
-		/* +18 */ bw.Write((uint)0); // -> ext
+		/* +18 */ bw.Write((uint)0); // -> eval
 		/* +1C */ bw.Write((uint)0); // padding
 		nUtl.WriteFixStr(bw, mSrc.mName);
 		long[] nodeTop = new long[n];
@@ -1129,6 +1235,8 @@ public class cMotClipWriter {
 			cNode node = mNodes[i];
 			node.WriteData(bw, nodeTop[i] + 0x40);
 		}
+		nUtl.PatchWithCurrPos32(bw, 0x18); // <- eval
+		mEvalInfo.Write(bw);
 		nUtl.PatchWithCurrPos32(bw, 0x4); // size
 	}
 

@@ -530,7 +530,7 @@ int motFindClipNode(const MOT_CLIP* pClip, const char* pName) {
 						--idx;
 						++nc;
 					}
-					for (int i = 0; i < nc; ++i) {
+					for (i = 0; i < nc; ++i) {
 						int tidx = hidx + i;
 						const MOT_NODE* pNode = &pClip->nodes[tidx];
 						if (len == pNode->name.len) {

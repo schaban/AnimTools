@@ -495,6 +495,14 @@ int motFindClipNode(const MOT_CLIP* pClip, const char* pName) {
 	return idx;
 }
 
+MOT_EVAL* motGetEvalInfo(const MOT_CLIP* pClip) {
+	MOT_EVAL* pEval = NULL;
+	if (pClip && pClip->eval) {
+		pEval = (MOT_EVAL*)&((uint8_t*)pClip)[pClip->eval];
+	}
+	return pEval;
+}
+
 float* motGetTrackData(const MOT_CLIP* pClip, int nodeIdx, E_MOT_TRK trk) {
 	float* p = NULL;
 	if (pClip && motClipNodeIdxCk(pClip, nodeIdx)) {

@@ -187,9 +187,11 @@ void test() {
 	FILE* pOut = NULL;
 	MOT_VEC* pRot = NULL;
 	MOT_MTX* pMtx = NULL;
+	MOT_EVAL* pEval = NULL;
 	int midx;
 	if (!pClip) return;
 
+	pEval = motGetEvalInfo(pClip);
 	nfrm = pClip->nfrm;
 	nnod = pClip->nnod;
 	npos = 0;
@@ -209,9 +211,9 @@ void test() {
 	printf("motion clip: %s\n", pClip->name.chr);
 	printf("#nod: %d\n", nnod);
 	printf("#frm: %d\n", nfrm);
-	printf("#pos tracks: %d\n", npos);
-	printf("#rot tracks: %d\n", nrot);
-	printf("#scl tracks: %d\n", nscl);
+	printf("#pos tracks: %d (%d)\n", npos, pEval->ntrk[TRK_POS]);
+	printf("#rot tracks: %d (%d)\n", nrot, pEval->ntrk[TRK_ROT]);
+	printf("#scl tracks: %d (%d)\n", nscl, pEval->ntrk[TRK_SCL]);
 
 	pOut = fopen("../dump.clip", "w");
 

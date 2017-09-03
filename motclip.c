@@ -393,6 +393,65 @@ MOT_VEC motQuatToDegrees(const MOT_QUAT q, E_MOT_RORD rord) {
 	return r;
 }
 
+#define ARY_BLK_SH (3)
+#define ARY_BLK_SIZE (1<<ARY_BLK_SH)
+
+void motQuatExpAry(MOT_QUAT* pQuats, const MOT_VEC* pVecs, int n) {
+	float x[ARY_BLK_SIZE];
+	float y[ARY_BLK_SIZE];
+	float z[ARY_BLK_SIZE];
+	float w[ARY_BLK_SIZE];
+	float t[ARY_BLK_SIZE];
+	float h[ARY_BLK_SIZE];
+	int blk, elem, idx;
+	int nblk = n >> ARY_BLK_SH;
+	if (!pQuats || !pVecs || n <= 0) return;
+	for (blk = 0; blk < nblk; ++blk) {
+		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) {
+			idx = (blk << ARY_BLK_SH) + elem;
+			x[elem] = pVecs[idx].x;
+			y[elem] = pVecs[idx].y;
+			z[elem] = pVecs[idx].z;
+		}
+
+#if 0
+		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { t[elem] = x[elem] * x[elem]; }
+		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { t[elem] += y[elem] * y[elem]; }
+		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { t[elem] += z[elem] * z[elem]; }
+		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { h[elem] = sqrtf(t[elem]); }
+#else
+		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { t[elem] = sq(x[elem]) + sq(y[elem]) + sq(z[elem]); }
+		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { h[elem] = sqrtf(t[elem]); }
+#endif
+		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { t[elem] = sinc(h[elem]); }
+		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { x[elem] *= t[elem]; }
+		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { y[elem] *= t[elem]; }
+		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { z[elem] *= t[elem]; }
+		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { w[elem] = cosf(h[elem]); }
+
+		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { t[elem] = x[elem] * x[elem]; }
+		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { t[elem] += y[elem] * y[elem]; }
+		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { t[elem] += z[elem] * z[elem]; }
+		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { t[elem] += w[elem] * w[elem]; }
+		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { t[elem] = 1.0f / sqrtf(t[elem]); }
+		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { x[elem] *= t[elem]; }
+		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { y[elem] *= t[elem]; }
+		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { z[elem] *= t[elem]; }
+		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { w[elem] *= t[elem]; }
+
+		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) {
+			idx = (blk << ARY_BLK_SH) + elem;
+			pQuats[idx].x = x[elem];
+			pQuats[idx].y = y[elem];
+			pQuats[idx].z = z[elem];
+			pQuats[idx].w = w[elem];
+		}
+	}
+	for (idx = (nblk << ARY_BLK_SH); idx < n; ++idx) {
+		pQuats[idx] = motQuatExp(pVecs[idx]);
+	}
+}
+
 int motClipHeaderCk(const MOT_CLIP* pClip) {
 	if (!pClip) return 0;
 	int i;
@@ -493,6 +552,29 @@ int motFindClipNode(const MOT_CLIP* pClip, const char* pName) {
 		}
 	}
 	return idx;
+}
+
+int motClipTrackCount(const MOT_CLIP* pClip, E_MOT_TRK kind) {
+	int n = 0;
+	MOT_EVAL* pEval = motGetEvalInfo(pClip);
+	switch (kind) {
+		case TRK_POS:
+		case TRK_ROT:
+		case TRK_SCL:
+			if (pEval) {
+				n = pEval->ntrk[(int)kind];
+			} else if (pClip) {
+				int i;
+				int nnod = pClip->nnod;
+				for (i = 0; i < nnod; ++i) {
+					if (motNodeTrackCk(pClip, i, kind)) {
+						++n;
+					}
+				}
+			}
+			break;
+	}
+	return n;
 }
 
 MOT_EVAL* motGetEvalInfo(const MOT_CLIP* pClip) {

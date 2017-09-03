@@ -105,12 +105,14 @@ MOT_EXTERN_FUNC MOT_QUAT motQuatExp(const MOT_VEC v);
 MOT_EXTERN_FUNC MOT_QUAT motQuatSlerp(const MOT_QUAT q1, const MOT_QUAT q2, float t);
 MOT_EXTERN_FUNC MOT_VEC motQuatToRadians(const MOT_QUAT q, E_MOT_RORD rord);
 MOT_EXTERN_FUNC MOT_VEC motQuatToDegrees(const MOT_QUAT q, E_MOT_RORD rord);
+MOT_EXTERN_FUNC void motQuatExpAry(MOT_QUAT* pQuats, const MOT_VEC* pVecs, int n);
 
 MOT_EXTERN_FUNC int motClipHeaderCk(const MOT_CLIP* pClip);
 MOT_EXTERN_FUNC int motClipNodeIdxCk(const MOT_CLIP* pClip, int nodeIdx);
 MOT_EXTERN_FUNC int motFrameNoCk(const MOT_CLIP* pClip, int fno);
 MOT_EXTERN_FUNC int motNodeTrackCk(const MOT_CLIP* pClip, int nodeIdx, E_MOT_TRK trk);
 MOT_EXTERN_FUNC int motFindClipNode(const MOT_CLIP* pClip, const char* pName);
+MOT_EXTERN_FUNC int motClipTrackCount(const MOT_CLIP* pClip, E_MOT_TRK kind);
 MOT_EXTERN_FUNC MOT_EVAL* motGetEvalInfo(const MOT_CLIP* pClip);
 MOT_EXTERN_FUNC float* motGetTrackData(const MOT_CLIP* pClip, int nodeIdx, E_MOT_TRK trk);
 MOT_EXTERN_FUNC void motGetChanData(const MOT_CLIP* pClip, int nodeIdx, E_MOT_TRK trk, int chIdx, float** ppData, int* pStride);

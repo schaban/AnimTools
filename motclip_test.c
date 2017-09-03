@@ -12,6 +12,17 @@
 
 #include "motclip.h"
 
+#if defined(_MSC_VER)
+#	define _INLINE __forceinline
+#	define _NOINLINE __declspec(noinline) 
+#elif defined(__GNUC__) || defined(__PGIC__)
+#	define _INLINE __inline__ __attribute__((__always_inline__))
+#	define _NOINLINE __attribute__((noinline))
+#else
+#	define _INLINE
+#	define _NOINLINE
+#endif
+
 double timestamp() {
 	double ms = 0.0f;
 #if defined(_WIN32)
@@ -29,6 +40,14 @@ double timestamp() {
 	ms = (double)t.tv_nsec*1.0e-3 + (double)t.tv_sec*1.0e6;
 #endif
 	return ms;
+}
+
+MOT_QUAT* allocQuats(int n) {
+	return (MOT_QUAT*)malloc(n * sizeof(MOT_QUAT));
+}
+
+MOT_VEC* allocVecs(int n) {
+	return (MOT_VEC*)malloc(n * sizeof(MOT_VEC));
 }
 
 MOT_CLIP* clipLoad(const char* pPath) {
@@ -165,6 +184,78 @@ static void perfFindClipNode(MOT_CLIP* pClip) {
 	printf("ratio: %f\n", dtSeq / dtBin);
 }
 
+typedef struct _PERF_RES {
+	double dt;
+	double sum;
+} PERF_RES;
+
+float qmag(MOT_QUAT q) {
+	return sqrtf(q.x*q.x + q.y*q.y + q.z*q.z + q.y*q.y);
+}
+
+//_NOINLINE
+void qexpAryLoop(MOT_QUAT* pQuats, const MOT_VEC* pVecs, int n) {
+	int i;
+	for (i = 0; i < n; ++i) {
+		pQuats[i] = motQuatExp(pVecs[i]);
+	}
+}
+
+static _NOINLINE PERF_RES perfQuatArySub(MOT_CLIP* pClip, int aryFlg) {
+	PERF_RES perf;
+	double smps[N_PERF_SMP];
+	int ismp;
+	double t0, t1;
+	double qsum = 0;
+	int nfrm = pClip->nfrm;
+	int nrot = motClipTrackCount(pClip, TRK_ROT);
+	MOT_QUAT* pQuats = allocQuats(nrot);
+	MOT_VEC* pVecs = allocVecs(nrot);
+	double* pSubSmps = (double*)malloc(nfrm * sizeof(double));
+	for (ismp = 0; ismp < N_PERF_SMP; ++ismp) {
+		int fno;
+		for (fno = 0; fno < nfrm; ++fno) {
+			int i;
+			int ivec = 0;
+			for (i = 0; i < (int)pClip->nnod; ++i) {
+				if (motNodeTrackCk(pClip, i, TRK_ROT)) {
+					pVecs[ivec++] = motGetVec(pClip, i, fno, TRK_ROT);
+				}
+			}
+			if (ivec != nrot) {
+				fprintf(stderr, "rot count mismatch\n");
+			}
+			t0 = timestamp();
+			if (aryFlg) {
+				motQuatExpAry(pQuats, pVecs, nrot);
+			} else {
+				qexpAryLoop(pQuats, pVecs, nrot);
+			}
+			t1 = timestamp();
+			pSubSmps[fno] = t1 - t0;
+			for (i = 0; i < nrot; ++i) {
+				qsum += qmag(pQuats[i]);
+			}
+		}
+		smps[ismp] = perfsmp(pSubSmps, nfrm);
+	}
+	free(pSubSmps);
+	free(pQuats);
+	free(pVecs);
+	perf.sum = qsum;
+	perf.dt = perfsmp(smps, N_PERF_SMP);
+	return perf;
+}
+
+static void perfQuatAry(MOT_CLIP* pClip) {
+	if (!pClip) return;
+	PERF_RES resLoop = perfQuatArySub(pClip, 0);
+	PERF_RES resVect = perfQuatArySub(pClip, 1);
+	printf("Loop: sum = %f, dt = %f\n", resLoop.sum, resLoop.dt);
+	printf("Vect: sum = %f, dt = %f\n", resVect.sum, resVect.dt);
+	printf("ration: %f\n", resLoop.dt / resVect.dt);
+}
+
 void init() {
 	const char* pClipName = "../data/walk.mclp";
 	MOT_CLIP* pClip = clipLoad(pClipName);
@@ -172,6 +263,7 @@ void init() {
 	s_pClip = pClip;
 	verifyFindClipNode(pClip);
 	perfFindClipNode(pClip);
+	perfQuatAry(pClip);
 }
 
 void test() {
@@ -211,9 +303,9 @@ void test() {
 	printf("motion clip: %s\n", pClip->name.chr);
 	printf("#nod: %d\n", nnod);
 	printf("#frm: %d\n", nfrm);
-	printf("#pos tracks: %d (%d)\n", npos, pEval->ntrk[TRK_POS]);
-	printf("#rot tracks: %d (%d)\n", nrot, pEval->ntrk[TRK_ROT]);
-	printf("#scl tracks: %d (%d)\n", nscl, pEval->ntrk[TRK_SCL]);
+	printf("#pos tracks: %d (%d)\n", npos, motClipTrackCount(pClip, TRK_POS));
+	printf("#rot tracks: %d (%d)\n", nrot, motClipTrackCount(pClip, TRK_ROT));
+	printf("#scl tracks: %d (%d)\n", nscl, motClipTrackCount(pClip, TRK_SCL));
 
 	pOut = fopen("../dump.clip", "w");
 

@@ -13,14 +13,14 @@
 #include "motclip.h"
 
 #if defined(_MSC_VER)
-#	define _INLINE __forceinline
-#	define _NOINLINE __declspec(noinline) 
+#	define D_INLINE __forceinline
+#	define D_NOINLINE __declspec(noinline) 
 #elif defined(__GNUC__) || defined(__PGIC__)
-#	define _INLINE __inline__ __attribute__((__always_inline__))
-#	define _NOINLINE __attribute__((noinline))
+#	define D_INLINE __inline__ __attribute__((__always_inline__))
+#	define D_NOINLINE __attribute__((noinline))
 #else
-#	define _INLINE
-#	define _NOINLINE
+#	define D_INLINE
+#	define D_NOINLINE
 #endif
 
 double timestamp() {
@@ -32,7 +32,7 @@ double timestamp() {
 		QueryPerformanceCounter(&ctr);
 		ms = ((double)ctr.QuadPart / (double)frq.QuadPart) * 1.0e6;
 	}
-#else
+#elif defined(CLOCK_MONOTONIC)
 	struct timespec t;
 	if (clock_gettime(CLOCK_MONOTONIC, &t) != 0) {
 		clock_gettime(CLOCK_REALTIME, &t);
@@ -193,7 +193,7 @@ float qmag(MOT_QUAT q) {
 	return sqrtf(q.x*q.x + q.y*q.y + q.z*q.z + q.y*q.y);
 }
 
-//_NOINLINE
+//D_NOINLINE
 void qexpAryLoop(MOT_QUAT* pQuats, const MOT_VEC* pVecs, int n) {
 	int i;
 	for (i = 0; i < n; ++i) {
@@ -201,7 +201,7 @@ void qexpAryLoop(MOT_QUAT* pQuats, const MOT_VEC* pVecs, int n) {
 	}
 }
 
-static _NOINLINE PERF_RES perfQuatArySub(MOT_CLIP* pClip, int aryFlg) {
+static D_NOINLINE PERF_RES perfQuatArySub(MOT_CLIP* pClip, int aryFlg) {
 	PERF_RES perf;
 	double smps[N_PERF_SMP];
 	int ismp;
@@ -253,7 +253,7 @@ static void perfQuatAry(MOT_CLIP* pClip) {
 	PERF_RES resVect = perfQuatArySub(pClip, 1);
 	printf("Loop: sum = %f, dt = %f\n", resLoop.sum, resLoop.dt);
 	printf("Vect: sum = %f, dt = %f\n", resVect.sum, resVect.dt);
-	printf("ration: %f\n", resLoop.dt / resVect.dt);
+	printf("ratio: %f\n", resLoop.dt / resVect.dt);
 }
 
 void init() {
@@ -279,11 +279,9 @@ void test() {
 	FILE* pOut = NULL;
 	MOT_VEC* pRot = NULL;
 	MOT_MTX* pMtx = NULL;
-	MOT_EVAL* pEval = NULL;
 	int midx;
 	if (!pClip) return;
 
-	pEval = motGetEvalInfo(pClip);
 	nfrm = pClip->nfrm;
 	nnod = pClip->nnod;
 	npos = 0;

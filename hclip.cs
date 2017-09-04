@@ -323,12 +323,12 @@ public struct VEC {
 	}
 }
 
-public class STR_LIST {
+public class cStrList {
 	public List<string> mStr;
 	public List<int> mOrd;
 	public List<uint> mHash;
 
-	public STR_LIST() {
+	public cStrList() {
 		Reset();
 	}
 
@@ -457,7 +457,7 @@ public class STR_LIST {
 	}
 }
 
-public class EVAL_INFO {
+public class cEvalInfo {
 	public struct MAP {
 		public int node;
 		public TRK_KIND kind;
@@ -477,7 +477,7 @@ public class EVAL_INFO {
 	public int[] ncrv;
 	public MAP[] map; // [ curves<pos,rot,scl>[ncrv], consts<pos,rot,scl>[nchn - ncrv] ]
 
-	public EVAL_INFO() {
+	public cEvalInfo() {
 		ntrk = new int[3];
 		nchn = new int[3];
 		ncrv = new int[3];
@@ -1108,10 +1108,10 @@ public class cMotClipWriter {
 	}
 
 	public cHouClip mSrc;
-	public STR_LIST mNodeNamesLst;
+	public cStrList mNodeNamesLst;
 	public List<string> mNodeNames;
 	public cNode[] mNodes;
-	public EVAL_INFO mEvalInfo;
+	public cEvalInfo mEvalInfo;
 
 	public cMotClipWriter(cHouClip src) {
 		mSrc = src;
@@ -1121,7 +1121,7 @@ public class cMotClipWriter {
 		for (int i = 0; i < n; ++i) {
 			mNodes[i] = new cNode(this, mNodeNames[i]);
 		}
-		mEvalInfo = new EVAL_INFO();
+		mEvalInfo = new cEvalInfo();
 		for (int i = 0; i < n; ++i) {
 			if (mNodes[i].mPosTrk.mSrcMask != 0) {
 				++mEvalInfo.ntrk[(int)TRK_KIND.POS];
@@ -1203,7 +1203,7 @@ public class cMotClipWriter {
 				names.Add(name);
 			}
 		}
-		mNodeNamesLst = new STR_LIST();
+		mNodeNamesLst = new cStrList();
 		foreach (string name in names) {
 			mNodeNamesLst.Add(name);
 		}

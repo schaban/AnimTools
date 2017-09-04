@@ -8,6 +8,8 @@
 const char g_motClipFmt[4] = { 'M', 'C', 'L', 'P' };
 const char g_motLibFmt[4] = { 'M', 'L', 'I', 'B' };
 
+const float c_pi = 3.14159274f;
+
 static float sq(float x) {
 	return x*x;
 }
@@ -24,11 +26,11 @@ static float lerp(float a, float b, float t) {
 }
 
 float motDegrees(float rad) {
-	return rad * (45.0f / atanf(1.0f));
+	return rad * (180.0f / c_pi);
 }
 
 float motRadians(float deg) {
-	return deg * (atanf(1.0f) / 45.0f);
+	return deg * (c_pi / 180.0f);
 }
 
 MOT_VEC motVecLerp(const MOT_VEC v1, const MOT_VEC v2, float t) {
@@ -393,6 +395,42 @@ MOT_VEC motQuatToDegrees(const MOT_QUAT q, E_MOT_RORD rord) {
 	return r;
 }
 
+static float arycos(float x) {
+	float x2 = x * x;
+	float x4 = x2 * x2;
+	float x6 = x2 * x4;
+	float x8 = x4 * x4;
+	float x10 = x4 * x6;
+	float x12 = x6 * x6;
+	return 1.0f - (1.0f/2)*x2 + (1.0f/24)*x4 - (1.0f/720)*x6 + (1.0f/40320)*x8 - (1.0f/3628800)*x10 + (1.0f/479001600)*x12;
+}
+
+static float arysinc(float x) {
+	float x2 = x * x;
+	float x4 = x2 * x2;
+	float x6 = x2 * x4;
+	float x8 = x4 * x4;
+	float x10 = x4 * x6;
+	float x12 = x6 * x6;
+	return 1.0f - (1.0f/6)*x2 + (1.0f/120)*x4 - (1.0f/5040)*x6 + (1.0f/362880)*x8 - (1.0f/39916800)*x10 + (1.0f/6227020800)*x12;
+}
+
+MOT_QUAT aryqexp(const MOT_VEC v) {
+	MOT_QUAT q;
+	int i;
+	float ha = sqrtf(sq(v.x) + sq(v.y) + sq(v.z));
+	float s = sinc(ha);
+	q.x = v.x * s;
+	q.y = v.y * s;
+	q.z = v.z * s;
+	q.w = cosf(ha);
+	s = 1.0f / sqrtf(sq(q.x) + sq(q.y) + sq(q.z) + sq(q.w));
+	for (i = 0; i < 4; ++i) {
+		q.s[i] *= s;
+	}
+	return q;
+}
+
 #define ARY_BLK_SH (3)
 #define ARY_BLK_SIZE (1<<ARY_BLK_SH)
 
@@ -414,25 +452,14 @@ void motQuatExpAry(MOT_QUAT* pQuats, const MOT_VEC* pVecs, int n) {
 			z[elem] = pVecs[idx].z;
 		}
 
-#if 0
-		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { t[elem] = x[elem] * x[elem]; }
-		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { t[elem] += y[elem] * y[elem]; }
-		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { t[elem] += z[elem] * z[elem]; }
-		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { h[elem] = sqrtf(t[elem]); }
-#else
-		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { t[elem] = sq(x[elem]) + sq(y[elem]) + sq(z[elem]); }
-		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { h[elem] = sqrtf(t[elem]); }
-#endif
-		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { t[elem] = sinc(h[elem]); }
+		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { h[elem] = sqrtf(sq(x[elem]) + sq(y[elem]) + sq(z[elem])); }
+		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { t[elem] = arysinc(h[elem]); }
 		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { x[elem] *= t[elem]; }
 		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { y[elem] *= t[elem]; }
 		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { z[elem] *= t[elem]; }
-		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { w[elem] = cosf(h[elem]); }
+		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { w[elem] = arycos(h[elem]); }
 
-		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { t[elem] = x[elem] * x[elem]; }
-		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { t[elem] += y[elem] * y[elem]; }
-		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { t[elem] += z[elem] * z[elem]; }
-		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { t[elem] += w[elem] * w[elem]; }
+		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { t[elem] = sq(x[elem]) + sq(y[elem]) + sq(z[elem]) + sq(w[elem]); }
 		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { t[elem] = 1.0f / sqrtf(t[elem]); }
 		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { x[elem] *= t[elem]; }
 		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { y[elem] *= t[elem]; }
@@ -448,7 +475,7 @@ void motQuatExpAry(MOT_QUAT* pQuats, const MOT_VEC* pVecs, int n) {
 		}
 	}
 	for (idx = (nblk << ARY_BLK_SH); idx < n; ++idx) {
-		pQuats[idx] = motQuatExp(pVecs[idx]);
+		pQuats[idx] = aryqexp(pVecs[idx]);
 	}
 }
 

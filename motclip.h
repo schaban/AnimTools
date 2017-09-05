@@ -44,7 +44,8 @@ typedef struct _MOT_TRACK {
 	MOT_VEC vmax;
 	uint8_t srcMask;
 	uint8_t dataMask;
-	uint8_t reserved[6];
+	uint8_t stride;
+	uint8_t reserved[5];
 } MOT_TRACK;
 
 typedef struct _MOT_NODE {

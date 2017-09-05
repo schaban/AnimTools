@@ -909,7 +909,9 @@ public class cMotClipWriter {
 		public VEC mMax;
 		public byte mSrcMask;
 		public byte mDataMask;
-		
+		public long mInfoTop;
+		public long mDataTop;
+
 		public cTrack(cNode node, TRK_KIND kind) {
 			mNode = node;
 			mKind = kind;
@@ -975,6 +977,18 @@ public class cMotClipWriter {
 		public float GetRawY(int frm) { return (mSrcY != null) ? mSrcY.GetVal(frm) : 0.0f; }
 		public float GetRawZ(int frm) { return (mSrcZ != null) ? mSrcZ.GetVal(frm) : 0.0f; }
 
+		public int Stride {
+			get {
+				int s = 0;
+				for (int i = 0; i < 3; ++i) {
+					if ((mDataMask & (1 << i)) != 0) {
+						++s;
+					}
+				}
+				return s;
+			}
+		}
+
 		public int NumChannels {
 			get {
 				int n = 0;
@@ -1003,17 +1017,19 @@ public class cMotClipWriter {
 
 
 		public void WriteInfo(BinaryWriter bw) {
+			mInfoTop = bw.BaseStream.Position - mNode.mClip.mFileTop;
 			mMin.Write(bw); // +00
 			mMax.Write(bw); // +0C
 			bw.Write(mSrcMask); // +18
 			bw.Write(mDataMask); // +19
-			bw.Write((byte)0); // +1A
+			bw.Write((byte)Stride); // +1A
 			bw.Write((byte)0); // +1B
 			bw.Write((int)0); // +1C
 		}
 		
 		public void WriteData(BinaryWriter bw) {
 			if (mData != null && mDataMask != 0) {
+				mDataTop = bw.BaseStream.Position - mNode.mClip.mFileTop;
 				int n = mData.Length;
 				for (int i = 0; i < n; ++i) {
 					if ((mDataMask & 1) != 0) {
@@ -1062,6 +1078,7 @@ public class cMotClipWriter {
 			mRotTrk = new cTrack(this, TRK_KIND.ROT);
 			mSclTrk = new cTrack(this, TRK_KIND.SCL);
 		}
+
 		
 		public void WriteInfo(BinaryWriter bw) {
 			nUtl.WriteFixStr(bw, mName);
@@ -1079,15 +1096,15 @@ public class cMotClipWriter {
 		
 		public void WriteData(BinaryWriter bw, long patchTop) {
 			if (mPosTrk.mDataMask != 0) {
-				nUtl.PatchWithCurrPos32(bw, patchTop);
+				mClip.PatchCur(patchTop);
 				mPosTrk.WriteData(bw);
 			}
 			if (mRotTrk.mDataMask != 0) {
-				nUtl.PatchWithCurrPos32(bw, patchTop + 4);
+				mClip.PatchCur(patchTop + 4);
 				mRotTrk.WriteData(bw);
 			}
 			if (mSclTrk.mDataMask != 0) {
-				nUtl.PatchWithCurrPos32(bw, patchTop + 8);
+				mClip.PatchCur(patchTop + 8);
 				mSclTrk.WriteData(bw);
 			}
 		}
@@ -1112,6 +1129,9 @@ public class cMotClipWriter {
 	public List<string> mNodeNames;
 	public cNode[] mNodes;
 	public cEvalInfo mEvalInfo;
+	public long mFileTop;
+
+	protected BinaryWriter mBW;
 
 	public cMotClipWriter(cHouClip src) {
 		mSrc = src;
@@ -1210,7 +1230,16 @@ public class cMotClipWriter {
 		mNodeNames = mNodeNamesLst.mStr;
 	}
 
+	public void PatchCur(long offs) {
+		if (mBW != null) {
+			int curOffs = (int)(mBW.BaseStream.Position - mFileTop);
+			nUtl.Patch32(mBW, offs, curOffs);
+		}
+	}
+
 	public void Write(BinaryWriter bw) {
+		mBW = bw;
+		mFileTop = bw.BaseStream.Position;
 		int n = NumNodes;
 		/* +00 */ bw.Write(DEFS.MOT_CLIP_ID);
 		/* +04 */ bw.Write((uint)0); // size
@@ -1227,7 +1256,7 @@ public class cMotClipWriter {
 			nodeTop[i] = bw.BaseStream.Position;
 			node.WriteInfo(bw);
 		}
-		nUtl.PatchWithCurrPos32(bw, 0x14); // <- hash
+		PatchCur(0x14); // <- hash
 		for (int i = 0; i < n; ++i) {
 			bw.Write(mNodeNamesLst.mHash[i]);
 		}
@@ -1235,9 +1264,10 @@ public class cMotClipWriter {
 			cNode node = mNodes[i];
 			node.WriteData(bw, nodeTop[i] + 0x40);
 		}
-		nUtl.PatchWithCurrPos32(bw, 0x18); // <- eval
+		PatchCur(0x18); // <- eval
 		mEvalInfo.Write(bw);
-		nUtl.PatchWithCurrPos32(bw, 0x4); // size
+		PatchCur(0x4); // size
+		mBW = null;
 	}
 
 	public void Save(string fpath) {

@@ -483,6 +483,18 @@ public class cEvalInfo {
 		ncrv = new int[3];
 	}
 
+	public int NumPosTracks => ntrk[(int)TRK_KIND.POS];
+	public int NumRotTracks => ntrk[(int)TRK_KIND.ROT];
+	public int NumSclTracks => ntrk[(int)TRK_KIND.SCL];
+
+	public int TracksTotal {
+		get {
+			int cnt = 0;
+			foreach (int n in ntrk) { cnt += n; }
+			return cnt;
+		}
+	}
+
 	public void AllocMap() {
 		int n = 0;
 		foreach (int nc in nchn) n += nc;
@@ -1124,11 +1136,26 @@ public class cMotClipWriter {
 		}
 	}
 
+	public struct SEQ {
+		public int node;
+		public int chan;
+		public int offs;
+		public int stride;
+
+		public void Write(BinaryWriter bw) {
+			bw.Write(offs);
+			bw.Write((ushort)node);
+			bw.Write((byte)chan);
+			bw.Write((byte)stride);
+		}
+	}
+
 	public cHouClip mSrc;
 	public cStrList mNodeNamesLst;
 	public List<string> mNodeNames;
 	public cNode[] mNodes;
 	public cEvalInfo mEvalInfo;
+	public SEQ[] mSeq;
 	public long mFileTop;
 
 	protected BinaryWriter mBW;
@@ -1177,6 +1204,33 @@ public class cMotClipWriter {
 							mEvalInfo.map[mapIdx].kind = kind;
 							++mapIdx;
 						}
+					}
+				}
+			}
+		}
+		mSeq = new SEQ[mEvalInfo.TracksTotal * 3];
+		int iseq = 0;
+		foreach (var kind in tkinds) {
+			for (int inod = 0; inod < n; ++inod) {
+				cTrack trk = mNodes[inod].GetTrack(kind);
+				if (trk.mSrcMask != 0) {
+					for (int ichn = 0; ichn < 3; ++ichn) {
+						mSeq[iseq].node = inod;
+						mSeq[iseq].chan = ichn;
+						bool srcFlg = (trk.mSrcMask & (1 << ichn)) != 0;
+						bool dataFlg = ((trk.mDataMask >> ichn) & 1) != 0;
+						if (srcFlg) {
+							mSeq[iseq].offs = 1;
+							if (dataFlg) {
+								mSeq[iseq].stride = trk.Stride;
+							} else {
+								mSeq[iseq].stride = 0;
+							}
+						} else {
+							mSeq[iseq].offs = 0;
+							mSeq[iseq].stride = 0;
+						}
+						++iseq;
 					}
 				}
 			}
@@ -1237,6 +1291,45 @@ public class cMotClipWriter {
 		}
 	}
 
+	protected void WriteSeq() {
+		BinaryWriter bw = mBW;
+		if (bw == null) return;
+		int n = NumNodes;
+		var tkinds = new TRK_KIND[] { TRK_KIND.POS, TRK_KIND.ROT, TRK_KIND.SCL };
+		int iseq = 0;
+		foreach (var kind in tkinds) {
+			for (int inod = 0; inod < n; ++inod) {
+				cTrack trk = mNodes[inod].GetTrack(kind);
+				if (trk.mSrcMask != 0) {
+					for (int ichn = 0; ichn < 3; ++ichn) {
+						if (mSeq[iseq].offs != 0) {
+							int offs;
+							if (mSeq[iseq].stride != 0) {
+								offs = (int)trk.mDataTop;
+								for (int k = 0; k < ichn; ++k) {
+									if ((trk.mDataMask & (1<<k)) != 0) {
+										offs += 4;
+									}
+								}
+							} else {
+								offs = (int)trk.mInfoTop + (ichn*4); /* -> vmin[ichn] */
+							}
+							mSeq[iseq].offs = offs;
+						}
+						++iseq;
+					}
+				}
+			}
+		}
+		int nseq = mSeq.Length;
+		if (iseq != nseq) {
+			throw new Exception("WriteSeq");
+		}
+		for (int i = 0; i < nseq; ++i) {
+			mSeq[i].Write(bw);
+		}
+	}
+
 	public void Write(BinaryWriter bw) {
 		mBW = bw;
 		mFileTop = bw.BaseStream.Position;
@@ -1248,7 +1341,7 @@ public class cMotClipWriter {
 		/* +10 */ bw.Write(n);
 		/* +14 */ bw.Write((uint)0); // -> hash
 		/* +18 */ bw.Write((uint)0); // -> eval
-		/* +1C */ bw.Write((uint)0); // padding
+		/* +1C */ bw.Write((uint)0); // -> seq
 		nUtl.WriteFixStr(bw, mSrc.mName);
 		long[] nodeTop = new long[n];
 		for (int i = 0; i < n; ++i) {
@@ -1266,6 +1359,8 @@ public class cMotClipWriter {
 		}
 		PatchCur(0x18); // <- eval
 		mEvalInfo.Write(bw);
+		PatchCur(0x1C); // <- seq
+		WriteSeq();
 		PatchCur(0x4); // size
 		mBW = null;
 	}

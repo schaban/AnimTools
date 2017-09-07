@@ -248,12 +248,52 @@ static D_NOINLINE PERF_RES perfQuatArySub(MOT_CLIP* pClip, int aryFlg) {
 }
 
 static void perfQuatAry(MOT_CLIP* pClip) {
+	if (pClip) {
+		PERF_RES resLoop = perfQuatArySub(pClip, 0);
+		PERF_RES resVect = perfQuatArySub(pClip, 1);
+		printf("Loop: sum = %f, dt = %f\n", resLoop.sum, resLoop.dt);
+		printf("Vect: sum = %f, dt = %f\n", resVect.sum, resVect.dt);
+		printf("ratio: %f\n", resLoop.dt / resVect.dt);
+	}
+}
+
+static void printSeqEntry(MOT_CLIP* pClip, MOT_SEQ* pSeq, const char* pTrkName) {
+	int inod = pSeq->node;
+	char* pNodeName = pClip->nodes[inod].name.chr;
+	printf("  %s:%s[%d]: ", pNodeName, pTrkName, pSeq->chan);
+	if (pSeq->offs) {
+		if (pSeq->stride) {
+			printf("data @ 0x%X, stride = %d", pSeq->offs, pSeq->stride);
+		} else {
+			printf("const @ 0x%X", pSeq->offs);
+		}
+	} else {
+		printf("--");
+	}
+	printf("\n");
+}
+
+static void printSeqInfo(MOT_CLIP* pClip) {
+	MOT_SEQ* pSeq;
+	int i, npos, nrot, nscl;
 	if (!pClip) return;
-	PERF_RES resLoop = perfQuatArySub(pClip, 0);
-	PERF_RES resVect = perfQuatArySub(pClip, 1);
-	printf("Loop: sum = %f, dt = %f\n", resLoop.sum, resLoop.dt);
-	printf("Vect: sum = %f, dt = %f\n", resVect.sum, resVect.dt);
-	printf("ratio: %f\n", resLoop.dt / resVect.dt);
+	pSeq = motGetSeqInfo(pClip);
+	if (!pSeq) return;
+	npos = motClipTrackCount(pClip, TRK_POS);
+	nrot = motClipTrackCount(pClip, TRK_ROT);
+	nscl = motClipTrackCount(pClip, TRK_SCL);
+	for (i = 0; i < npos * 3; ++i) {
+		printSeqEntry(pClip, pSeq, "pos");
+		++pSeq;
+	}
+	for (i = 0; i < nrot * 3; ++i) {
+		printSeqEntry(pClip, pSeq, "rot");
+		++pSeq;
+	}
+	for (i = 0; i < nscl * 3; ++i) {
+		printSeqEntry(pClip, pSeq, "rot");
+		++pSeq;
+	}
 }
 
 void init() {
@@ -264,6 +304,7 @@ void init() {
 	verifyFindClipNode(pClip);
 	perfFindClipNode(pClip);
 	perfQuatAry(pClip);
+	//printSeqInfo(pClip);
 }
 
 void test() {

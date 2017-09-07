@@ -70,6 +70,13 @@ typedef struct _MOT_EVAL {
 	MOT_CMAP map[1];
 } MOT_EVAL;
 
+typedef struct _MOT_SEQ {
+	uint32_t offs;
+	uint16_t node;
+	uint8_t  chan;
+	uint8_t  stride;
+} MOT_SEQ;
+
 typedef struct _MOT_CLIP {
 	char       fmt[4];
 	uint32_t   size;
@@ -78,7 +85,7 @@ typedef struct _MOT_CLIP {
 	uint32_t   nnod;
 	uint32_t   hash;
 	uint32_t   eval;
-	uint32_t   pad;
+	uint32_t   seq;
 	MOT_STRING name;
 	MOT_NODE   nodes[1];
 } MOT_CLIP;
@@ -115,6 +122,7 @@ MOT_EXTERN_FUNC int motNodeTrackCk(const MOT_CLIP* pClip, int nodeIdx, E_MOT_TRK
 MOT_EXTERN_FUNC int motFindClipNode(const MOT_CLIP* pClip, const char* pName);
 MOT_EXTERN_FUNC int motClipTrackCount(const MOT_CLIP* pClip, E_MOT_TRK kind);
 MOT_EXTERN_FUNC MOT_EVAL* motGetEvalInfo(const MOT_CLIP* pClip);
+MOT_EXTERN_FUNC MOT_SEQ* motGetSeqInfo(const MOT_CLIP* pClip);
 MOT_EXTERN_FUNC float* motGetTrackData(const MOT_CLIP* pClip, int nodeIdx, E_MOT_TRK trk);
 MOT_EXTERN_FUNC void motGetChanData(const MOT_CLIP* pClip, int nodeIdx, E_MOT_TRK trk, int chIdx, float** ppData, int* pStride);
 MOT_EXTERN_FUNC E_MOT_RORD motGetRotOrd(const MOT_CLIP* pClip, int nodeIdx);

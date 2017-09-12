@@ -408,9 +408,13 @@ static float series(float x, const float tbl[]) {
 	float x4 = x2 * x2;
 	float x6 = x2 * x4;
 	float x8 = x4 * x4;
+#if 0
 	float x10 = x4 * x6;
 	float x12 = x6 * x6;
 	return 1.0f + tbl[0]*x2 + tbl[1]*x4 + tbl[2]*x6 + tbl[3]*x8 + tbl[4]*x10 + tbl[5]*x12;
+#else
+	return 1.0f + tbl[0]*x2 + tbl[1]*x4 + tbl[2]*x6 + tbl[3]*x8;
+#endif
 }
 
 static float arycos(float x) { return series(x, s_costbl); }
@@ -420,12 +424,13 @@ static float arysinc(float x) { return series(x, s_sinctbl); }
 MOT_QUAT aryqexp(const MOT_VEC v) {
 	MOT_QUAT q;
 	int i;
+	float s;
 	float ha = sqrtf(sq(v.x) + sq(v.y) + sq(v.z));
-	float s = arysinc(ha);
+	q.w = arycos(ha);
+	s = arysinc(ha);
 	q.x = v.x * s;
 	q.y = v.y * s;
 	q.z = v.z * s;
-	q.w = arycos(ha);
 	s = 1.0f / sqrtf(sq(q.x) + sq(q.y) + sq(q.z) + sq(q.w));
 	for (i = 0; i < 4; ++i) {
 		q.s[i] *= s;
@@ -433,12 +438,61 @@ MOT_QUAT aryqexp(const MOT_VEC v) {
 	return q;
 }
 
+#if defined(_MSC_VER)
+#define ARY_BLK_SH (3)
+#define ARY_BLK_SIZE (1<<ARY_BLK_SH)
+void motQuatExpAry(MOT_QUAT* pQuats, const MOT_VEC* pVecs, int n) {
+	float x[ARY_BLK_SIZE];
+	float y[ARY_BLK_SIZE];
+	float z[ARY_BLK_SIZE];
+	float w[ARY_BLK_SIZE];
+	float t[ARY_BLK_SIZE];
+	float h[ARY_BLK_SIZE];
+	int blk, elem, idx;
+	int nblk = n >> ARY_BLK_SH;
+	if (!pQuats || !pVecs || n <= 0) return;
+	for (blk = 0; blk < nblk; ++blk) {
+		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) {
+			idx = (blk << ARY_BLK_SH) + elem;
+			x[elem] = pVecs[idx].x;
+			y[elem] = pVecs[idx].y;
+			z[elem] = pVecs[idx].z;
+		}
+
+		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { h[elem] = sqrtf(sq(x[elem]) + sq(y[elem]) + sq(z[elem])); }
+		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { t[elem] = arysinc(h[elem]); }
+		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { w[elem] = arycos(h[elem]); }
+		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { x[elem] *= t[elem]; }
+		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { y[elem] *= t[elem]; }
+		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { z[elem] *= t[elem]; }
+
+		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { t[elem] = sq(x[elem]) + sq(y[elem]) + sq(z[elem]) + sq(w[elem]); }
+		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { t[elem] = 1.0f / sqrtf(t[elem]); }
+		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { x[elem] *= t[elem]; }
+		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { y[elem] *= t[elem]; }
+		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { z[elem] *= t[elem]; }
+		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) { w[elem] *= t[elem]; }
+
+		for (elem = 0; elem < ARY_BLK_SIZE; ++elem) {
+			idx = (blk << ARY_BLK_SH) + elem;
+			pQuats[idx].x = x[elem];
+			pQuats[idx].y = y[elem];
+			pQuats[idx].z = z[elem];
+			pQuats[idx].w = w[elem];
+		}
+	}
+	for (idx = (nblk << ARY_BLK_SH); idx < n; ++idx) {
+		pQuats[idx] = aryqexp(pVecs[idx]);
+	}
+}
+#else
 void motQuatExpAry(MOT_QUAT* pQuats, const MOT_VEC* pVecs, int n) {
 	int idx;
 	for (idx = 0; idx < n; ++idx) {
 		pQuats[idx] = aryqexp(pVecs[idx]);
 	}
 }
+#endif
 
 int motClipHeaderCk(const MOT_CLIP* pClip) {
 	if (!pClip) return 0;

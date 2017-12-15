@@ -29,7 +29,12 @@ enum E_MOT_TRK { POS, ROT, SCL };
 enum E_MOT_RORD { XYZ, XZY, YXZ, YZX, ZXY, ZYX };
 enum E_MOT_XORD { SRT, STR, RST, RTS, TSR, TRS };
 
-typedef char MOT_STRING[0x40];
+struct MOT_STRING {
+	uint8_t len;
+	char    chr[0x40 - 1];
+
+	operator char* () { return chr; }
+};
 
 union MOT_VEC {
 	struct { float x, y, z; };
@@ -59,12 +64,16 @@ struct MOT_NODE {
 };
 
 struct MOT_CLIP {
-	char sig[4];
-	float fps;
-	uint32_t nfrm;
-	uint32_t nnod;
+	char       sig[4];
+	uint32_t   size;
+	float      rate;
+	uint32_t   nfrm;
+	uint32_t   nnod;
+	uint32_t   hash;
+	uint32_t   eval;
+	uint32_t   seq;
 	MOT_STRING name;
-	MOT_NODE nodes[1];
+	MOT_NODE   nodes[1];
 };
 
 MOT_QUAT motQuatExp(MOT_VEC v) {
@@ -355,8 +364,9 @@ void cMotion::load(const char* pPath) {
 		if (pCh->pCoefs) {
 			RDFT_fwd(pCh->pCoefs, pCh->pData, nfrm, pCh->stride);
 			if (pTmp) {
+				char* pNodeName = mpClip->nodes[pCh->nodeId].name;
 				RDFT_inv(pTmp, pCh->pCoefs, nfrm);
-				::printf("-- [%d] %s:%c\n", i, mpClip->nodes[pCh->nodeId].name, "xyz"[pCh->chId]);
+				::printf("-- [%d] %s:%c\n", i, pNodeName, "xyz"[pCh->chId]);
 				for (int k = 0; k < nfrm; ++k) {
 					float ref = pCh->pData[k*pCh->stride];
 					float val = pTmp[k];
@@ -585,7 +595,7 @@ void cMotion::eval_dev(float frame) {
 
 static cMotion s_mot;
 
-void init() {
+void init(const char* pClipPath) {
 	cudaDeviceProp devProps;
 	cudaGetDeviceProperties(&devProps, 0);
 	s_blkMax = devProps.maxThreadsPerBlock / 8;
@@ -596,8 +606,7 @@ void init() {
 	::printf("concurrent exec = %s\n", devProps.concurrentKernels ? "yes" : "no");
 	::printf("\n");
 
-	const char* pPath = "test.mclp";
-	s_mot.load(pPath);
+	s_mot.load(pClipPath);
 	::printf("#rot chans = %d\n", s_mot.get_nrot());
 	::printf("#pos vecs = %d\n", s_mot.get_npos());
 }
@@ -617,8 +626,11 @@ double res_l2() {
 }
 
 
-int main() {
-	init();
+int main(int argc, char* argv[]) {
+	if (argc < 2) {
+		return -1;
+	}
+	init(argv[1]);
 
 	const int N = 1000;
 	double cpuT = 0.0f;

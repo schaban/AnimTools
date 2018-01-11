@@ -1,5 +1,5 @@
 /*
- * Convert motion channels from Houdini .clip files into node-based binary format.
+ * Convert motion channels from Houdini/TouchDesigner .clip files into node-based binary format.
  * Author: Sergey Chaban <sergey.chaban@gmail.com>
  */
 
@@ -754,6 +754,41 @@ public class cHouClip {
 			}
 			return idx;
 		}
+
+		protected int ReadDataRLE(string[] toks, int idx) {
+			int n = mClip.mFramesNum;
+			mData = new float[n];
+			int cnt = 0;
+			while (true) {
+				if (cnt >= n) break;
+				string t = toks[idx++];
+				if (t.StartsWith("@")) {
+					int nrle = nUtl.ParseInt(t.Substring(1));
+					float val = nUtl.ParseF32(toks[idx++]);
+					if (cnt == 0) {
+						mMinVal = val;
+						mMaxVal = val;
+					} else {
+						mMinVal = Math.Min(mMinVal, val);
+						mMaxVal = Math.Max(mMaxVal, val);
+					}
+					for (int i = 0; i < nrle; ++i) {
+						mData[cnt++] = val;
+					}
+				} else {
+					float val = nUtl.ParseF32(t);
+					if (cnt == 0) {
+						mMinVal = val;
+						mMaxVal = val;
+					} else {
+						mMinVal = Math.Min(mMinVal, val);
+						mMaxVal = Math.Max(mMaxVal, val);
+					}
+					mData[cnt++] = val;
+				}
+			}
+			return idx;
+		}
 		
 		public int Read(string[] toks, int idx) {
 			int i = idx;
@@ -774,6 +809,9 @@ public class cHouClip {
 						break;
 					case "data":
 						i = ReadData(toks, i);
+						break;
+					case "data_rle":
+						i = ReadDataRLE(toks, i);
 						break;
 					case "lefttype":
 						++i;

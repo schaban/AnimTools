@@ -107,9 +107,10 @@ public struct QUAT {
 			/* ZYX */ 2, 1, 0
 		};
 		int idx = (int)ord;
-		if (idx >= 6) {
+		if ((uint)idx >= 6U) {
 			Identity();
 		} else {
+			idx *= 3;
 			int iq2 = tbl[idx];
 			int iq1 = tbl[idx + 1];
 			int iq0 = tbl[idx + 2];

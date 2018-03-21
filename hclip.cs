@@ -1720,32 +1720,38 @@ public class cMotClipReader {
 			}
 		}
 	}
-	
-	public void DumpClip(TextWriter tw, DUMP_MODE mode) {
-		if (mNodes == null) return;
-		int ntrk = 0;
+
+	protected int CalcDumpChanCount(DUMP_MODE mode) {
+		if (mNodes == null) return 0;
+		int nchn = 0;
 		foreach (cNode node in mNodes) {
 			if (node.mRotTrk != null) {
 				switch (mode) {
 					case DUMP_MODE.QUATS:
 						if (node.mRotTrk.mSrcMask != 0) {
-							ntrk += 4;
+							nchn += 4;
 						}
 						break;
 					case DUMP_MODE.LOGVECS:
 						if (node.mRotTrk.mSrcMask != 0) {
-							ntrk += 3;
+							nchn += 3;
 						}
 						break;
 					default:
-						ntrk += node.mRotTrk.NumSrcChannels;
+						nchn += node.mRotTrk.NumSrcChannels;
 						break;
 				}
 			}
 			if (node.mPosTrk != null) {
-				ntrk += node.mPosTrk.NumSrcChannels;
+				nchn += node.mPosTrk.NumSrcChannels;
 			}
 		}
+		return nchn;
+	}
+	
+	public void DumpClip(TextWriter tw, DUMP_MODE mode) {
+		if (mNodes == null) return;
+		int ntrk = CalcDumpChanCount(mode);
 		tw.WriteLine(@"{");
 		tw.WriteLine("   rate = {0}", mRate);
 		tw.WriteLine("   start = {0}", -1);
@@ -1770,6 +1776,181 @@ public class cMotClipReader {
 	
 	public void DumpClip(TextWriter tw) {
 		DumpClip(tw, DUMP_MODE.DEFAULT);
+	}
+
+	public struct TABLE {
+		public string[] mNames;
+		public float[] mChans;
+		public int mRows;
+		public int mCols;
+
+		public int NumChannels => mCols;
+		public int NumFrames => mRows;
+
+		public bool CkIdx(int irow, int icol) {
+			if (irow < 0 || irow >= mRows) return false;
+			if (icol < 0 || icol >= mCols) return false;
+			return true;
+		}
+
+		public float this[int irow, int icol] {
+			get {
+				float val = Single.NaN;
+				if (mChans != null && CkIdx(irow, icol)) {
+					val = mChans[irow*mCols + icol];
+				}
+				return val;
+			}
+			set {
+				if (mChans != null && CkIdx(irow, icol)) {
+					mChans[irow*mCols + icol] = value;
+				}
+			}
+		}
+
+		/*
+			channel data:
+				by index: chans(:,i)
+				by name: chans(:, find( strcmp("<chan_name>", names) ) )
+		 */
+		public void WriteOctave(TextWriter tw) {
+			if (tw == null) return;
+			tw.WriteLine("# name: names");
+			tw.WriteLine("# type: cell");
+			tw.WriteLine("# rows: {0}", NumChannels);
+			tw.WriteLine("# columns: 1");
+			for (int i = 0; i < NumChannels; ++i) {
+				string name = mNames[i];
+				tw.WriteLine("# name: <cell-element>");
+				tw.WriteLine("# type: sq_string");
+				tw.WriteLine("# elements: 1");
+				tw.WriteLine("# length: {0}", name.Length);
+				tw.WriteLine("{0}", name);
+			}
+			tw.WriteLine("# name: chans");
+			tw.WriteLine("# type: matrix");
+			tw.WriteLine("# rows: {0}", mRows);
+			tw.WriteLine("# columns: {0}", mCols);
+			for (int i = 0; i < mRows; ++i) {
+				for (int j = 0; j < mCols; ++j) {
+					float val = this[i, j];
+					tw.Write(" {0}", val);
+				}
+				tw.WriteLine();
+			}
+		}
+	}
+
+	public TABLE Tabulate(DUMP_MODE mode) {
+		TABLE tbl = new TABLE();
+		int nfrm = mFramesNum;
+		int nchn = CalcDumpChanCount(mode);
+		tbl.mNames = new string[nchn];
+		tbl.mChans = new float[nfrm * nchn];
+		tbl.mRows = nfrm;
+		tbl.mCols = nchn;
+		int ichn = 0;
+		foreach (cNode node in mNodes) {
+			if (node.mRotTrk != null && node.mRotTrk.mSrcMask != 0) {
+				switch (mode) {
+					case DUMP_MODE.LOGVECS:
+						for (int c = 0; c < 3; ++c) {
+							tbl.mNames[ichn++] = node.mName + ":lv" + "xyz"[c];
+						}
+						break;
+					case DUMP_MODE.QUATS:
+						for (int c = 0; c < 4; ++c) {
+							tbl.mNames[ichn++] = node.mName + ":q" + "xyzw"[c];
+						}
+						break;
+					default:
+						for (int c = 0; c < 3; ++c) {
+							if ((node.mRotTrk.mSrcMask & (1 << c)) != 0) {
+								tbl.mNames[ichn++] = node.mName + ":r" + "xyz"[c];
+							}
+						}
+						break;
+				}
+			}
+			if (node.mPosTrk != null && node.mPosTrk.mSrcMask != 0) {
+				for (int c = 0; c < 3; ++c) {
+					if ((node.mPosTrk.mSrcMask & (1 << c)) != 0) {
+						tbl.mNames[ichn++] = node.mName + ":t" + "xyz"[c];
+					}
+				}
+			}
+		}
+
+		ichn = 0;
+		foreach (cNode node in mNodes) {
+			if (node.mRotTrk != null && node.mRotTrk.mSrcMask != 0) {
+				switch (mode) {
+					case DUMP_MODE.LOGVECS:
+						for (int ifrm = 0; ifrm < nfrm; ++ifrm) {
+							VEC lv = node.GetLogVec(ifrm);
+							for (int c = 0; c < 3; ++c) {
+								tbl[ifrm, ichn + c] = lv[c];
+							}
+						}
+						ichn += 3;
+						break;
+					case DUMP_MODE.QUATS:
+						for (int ifrm = 0; ifrm < nfrm; ++ifrm) {
+							QUAT q = node.GetQuat(ifrm);
+							for (int c = 0; c < 4; ++c) {
+								tbl[ifrm, ichn + c] = q[c];
+							}
+						}
+						ichn += 4;
+						break;
+					default:
+						for (int ifrm = 0; ifrm < nfrm; ++ifrm) {
+							float[] r = node.GetDegrees(ifrm);
+							int ci = 0;
+							for (int c = 0; c < 3; ++c) {
+								if ((node.mRotTrk.mSrcMask & (1 << c)) != 0) {
+									tbl[ifrm, ichn + ci] = r[c];
+									++ci;
+								}
+							}
+						}
+						for (int c = 0; c < 3; ++c) {
+							if ((node.mRotTrk.mSrcMask & (1 << c)) != 0) {
+								++ichn;
+							}
+						}
+						break;
+				}
+			}
+			if (node.mPosTrk != null && node.mPosTrk.mSrcMask != 0) {
+				for (int ifrm = 0; ifrm < nfrm; ++ifrm) {
+					VEC pos = node.GetPos(ifrm);
+					int ci = 0;
+					for (int c = 0; c < 3; ++c) {
+						if ((node.mPosTrk.mSrcMask & (1 << c)) != 0) {
+							tbl[ifrm, ichn + ci] = pos[c];
+							++ci;
+						}
+					}
+				}
+				for (int c = 0; c < 3; ++c) {
+					if ((node.mPosTrk.mSrcMask & (1 << c)) != 0) {
+						++ichn;
+					}
+				}
+			}
+		}
+		return tbl;
+	}
+
+	public void DumpOctave(TextWriter tw, DUMP_MODE mode) {
+		if (mNodes == null) return;
+		TABLE tbl = Tabulate(mode);
+		tbl.WriteOctave(tw);
+	}
+
+	public void DumpOctave(TextWriter tw) {
+		DumpOctave(tw, DUMP_MODE.DEFAULT);
 	}
 }
 
@@ -1879,8 +2060,10 @@ public class HClipTool {
 		} else if (args.HasOption("quats")) {
 			dumpMode = DUMP_MODE.QUATS;
 		}
+
 		mcr.DumpClip(Console.Out, dumpMode);
-		
+		//mcr.DumpOctave(Console.Out, dumpMode);
+
 		return 0;
 	}
 

@@ -1422,11 +1422,11 @@ public class cMotClipReader {
 		public byte mSrcMask;
 		public byte mDataMask;
 		public VEC[] mData;
-		
+
 		public cTrack(cNode node) {
 			mNode = node;
 		}
-		
+
 		public int NumSrcChannels {
 			get {
 				int n = 0;
@@ -1436,7 +1436,7 @@ public class cMotClipReader {
 				return n;
 			}
 		}
-		
+
 		public void ReadInfo(BinaryReader br) {
 			mMin.Read(br);
 			mMax.Read(br);
@@ -1446,7 +1446,7 @@ public class cMotClipReader {
 			br.ReadByte();
 			br.ReadInt32();
 		}
-		
+
 		public void ReadData(BinaryReader br) {
 			int n = mNode.mClip.mFramesNum;
 			mData = new VEC[n];
@@ -1481,7 +1481,7 @@ public class cMotClipReader {
 		public cNode(cMotClipReader clip) {
 			mClip = clip;
 		}
-		
+
 		public void ReadInfo(BinaryReader br) {
 			mFileTop = br.BaseStream.Position;
 			mName = nUtl.ReadFixStr(br);
@@ -1500,7 +1500,7 @@ public class cMotClipReader {
 			mSclTrk = new cTrack(this);
 			mSclTrk.ReadInfo(br);
 		}
-		
+
 		public void ReadData(BinaryReader br) {
 			long top = mClip.mFileTop;
 			if (mOffsPos != 0) {
@@ -1516,7 +1516,7 @@ public class cMotClipReader {
 				mSclTrk.ReadData(br);
 			}
 		}
-		
+
 		public VEC GetLogVec(int fno) {
 			VEC v = new VEC();
 			v.Fill(0.0f);
@@ -1529,24 +1529,24 @@ public class cMotClipReader {
 			}
 			return v;
 		}
-		
+
 		public QUAT GetQuat(int fno) {
 			VEC v = GetLogVec(fno);
 			QUAT q = new QUAT();
 			q.FromLogVec(v);
 			return q;
 		}
-		
+
 		public float[] GetRadians(int fno) {
 			QUAT q = GetQuat(fno);
 			return q.GetR(mRotOrd);
 		}
-		
+
 		public float[] GetDegrees(int fno) {
 			QUAT q = GetQuat(fno);
 			return q.GetD(mRotOrd);
 		}
-		
+
 		public VEC GetPos(int fno) {
 			VEC v = new VEC();
 			v.Fill(0.0f);
@@ -1559,7 +1559,7 @@ public class cMotClipReader {
 			}
 			return v;
 		}
-		
+
 		public VEC GetScl(int fno) {
 			VEC v = new VEC();
 			v.Fill(1.0f);
@@ -1572,7 +1572,7 @@ public class cMotClipReader {
 			}
 			return v;
 		}
-		
+
 		public override string ToString() {
 			return String.Format("{0} @ ({1:X}, {2:X}, {3:X}), {4} {5}", mName, mOffsPos, mOffsRot, mOffsScl, mXformOrd, mRotOrd);
 		}
@@ -1590,9 +1590,9 @@ public class cMotClipReader {
 
 	public cMotClipReader() {
 	}
-	
+
 	public bool CkFrameNo(int fno) { return fno >= 0 && fno < mFramesNum; }
-	
+
 	public int FindNodeIdx(string name) {
 		int i = -1;
 		if (mNodeMap != null && mNodeMap.ContainsKey(name)) {
@@ -1600,7 +1600,7 @@ public class cMotClipReader {
 		}
 		return i;
 	}
-	
+
 	public cNode FindNode(string name) {
 		cNode node = null;
 		int i = FindNodeIdx(name);
@@ -1627,7 +1627,7 @@ public class cMotClipReader {
 		mNodes = new cNode[mNodesNum];
 		mNodeMap = new Dictionary<string, int>();
 		for (int i = 0; i < mNodesNum; ++i) {
-			br.BaseStream.Seek(DEFS.CLIP_HEADER_SIZE + (i*DEFS.NODE_INFO_SIZE), SeekOrigin.Begin);
+			br.BaseStream.Seek(DEFS.CLIP_HEADER_SIZE + (i * DEFS.NODE_INFO_SIZE), SeekOrigin.Begin);
 			mNodes[i] = new cNode(this);
 			mNodes[i].ReadInfo(br);
 			string nodeName = mNodes[i].mName;
@@ -1641,7 +1641,7 @@ public class cMotClipReader {
 			mNodes[i].ReadData(br);
 		}
 	}
-	
+
 	public void Load(string fpath) {
 		FileInfo fi = new FileInfo(fpath);
 		if (!fi.Exists) {
@@ -1652,7 +1652,7 @@ public class cMotClipReader {
 		Read(br);
 		br.Close();
 	}
-	
+
 	protected void DumpLogVecs(TextWriter tw, cNode node) {
 		if (node.mRotTrk == null || node.mRotTrk.mSrcMask == 0) return;
 		int nfrm = mFramesNum;
@@ -1668,7 +1668,7 @@ public class cMotClipReader {
 			tw.WriteLine(@"   }");
 		}
 	}
-	
+
 	protected void DumpQuats(TextWriter tw, cNode node) {
 		if (node.mRotTrk == null || node.mRotTrk.mSrcMask == 0) return;
 		int nfrm = mFramesNum;
@@ -1684,7 +1684,7 @@ public class cMotClipReader {
 			tw.WriteLine(@"   }");
 		}
 	}
-	
+
 	protected void DumpRotChans(TextWriter tw, cNode node) {
 		if (node.mRotTrk == null || node.mRotTrk.mSrcMask == 0) return;
 		int nfrm = mFramesNum;
@@ -1702,7 +1702,7 @@ public class cMotClipReader {
 			}
 		}
 	}
-	
+
 	protected void DumpPosChans(TextWriter tw, cNode node) {
 		if (node.mPosTrk == null || node.mPosTrk.mSrcMask == 0) return;
 		int nfrm = mFramesNum;
@@ -1748,7 +1748,7 @@ public class cMotClipReader {
 		}
 		return nchn;
 	}
-	
+
 	public void DumpClip(TextWriter tw, DUMP_MODE mode) {
 		if (mNodes == null) return;
 		int ntrk = CalcDumpChanCount(mode);
@@ -1773,7 +1773,7 @@ public class cMotClipReader {
 		}
 		tw.WriteLine(@"}");
 	}
-	
+
 	public void DumpClip(TextWriter tw) {
 		DumpClip(tw, DUMP_MODE.DEFAULT);
 	}
@@ -1797,13 +1797,13 @@ public class cMotClipReader {
 			get {
 				float val = Single.NaN;
 				if (mChans != null && CkIdx(irow, icol)) {
-					val = mChans[irow*mCols + icol];
+					val = mChans[irow * mCols + icol];
 				}
 				return val;
 			}
 			set {
 				if (mChans != null && CkIdx(irow, icol)) {
-					mChans[irow*mCols + icol] = value;
+					mChans[irow * mCols + icol] = value;
 				}
 			}
 		}
@@ -1835,6 +1835,33 @@ public class cMotClipReader {
 				for (int j = 0; j < mCols; ++j) {
 					float val = this[i, j];
 					tw.Write(" {0}", val);
+				}
+				tw.WriteLine();
+			}
+		}
+
+		public void WriteColumns(TextWriter tw) {
+			if (tw == null) return;
+			for (int i = 0; i < NumChannels; ++i) {
+				tw.Write("{0}{1}", mNames[i], i < NumChannels - 1 ? "\t" : "");
+			}
+			tw.WriteLine();
+			for (int i = 0; i < mRows; ++i) {
+				for (int j = 0; j < mCols; ++j) {
+					float val = this[i, j];
+					tw.Write("{0}{1}", val, j < mCols - 1 ? "\t" : "");
+				}
+				tw.WriteLine();
+			}
+		}
+
+		public void WriteRows(TextWriter tw) {
+			if (tw == null) return;
+			for (int j = 0; j < mCols; ++j) {
+				tw.Write("{0}", mNames[j]);
+				for (int i = 0; i < mRows; ++i) {
+					float val = this[i, j];
+					tw.Write("\t{0}", val);
 				}
 				tw.WriteLine();
 			}
@@ -1952,6 +1979,26 @@ public class cMotClipReader {
 	public void DumpOctave(TextWriter tw) {
 		DumpOctave(tw, DUMP_MODE.DEFAULT);
 	}
+
+	/*
+		chans = numpy.genfromtxt("<path>", names = True, deletechars = "")
+		nchn = len(chans[0])
+		nfrm = len(chans)
+		for idx, name in enumerate(chans.dtype.names):
+			ch = [chans[i][idx] for i in range(nfrm)]
+			...
+	 */
+	public void DumpColumns(TextWriter tw, DUMP_MODE mode) {
+		if (mNodes == null) return;
+		TABLE tbl = Tabulate(mode);
+		tbl.WriteColumns(tw);
+	}
+
+	public void DumpRows(TextWriter tw, DUMP_MODE mode) {
+		if (mNodes == null) return;
+		TABLE tbl = Tabulate(mode);
+		tbl.WriteRows(tw);
+	}
 }
 
 
@@ -2030,6 +2077,20 @@ public class HClipTool {
 		}
 	}
 
+	private static TextWriter GetTW(cArgs args, string optName) {
+		TextWriter tw = null;
+		if (args.HasOption(optName)) {
+			string fpath = args.GetOpt(optName);
+			if (fpath != null && fpath != "") {
+				FileStream ofs = new FileStream(fpath, FileMode.Create);
+				if (ofs != null && ofs.CanWrite) {
+					tw = new StreamWriter(ofs);
+				}
+			}
+		}
+		return tw;
+	}
+
 	public static int Main(string[] argStrs) {
 		Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
 
@@ -2050,7 +2111,6 @@ public class HClipTool {
 		string motPath = clpPath.Replace(".clip", ".mclp");
 		mcw.Save(motPath);
 
-	
 		var mcr = new cMotClipReader();
 		mcr.Load(motPath);
 		
@@ -2061,8 +2121,26 @@ public class HClipTool {
 			dumpMode = DUMP_MODE.QUATS;
 		}
 
-		mcr.DumpClip(Console.Out, dumpMode);
-		//mcr.DumpOctave(Console.Out, dumpMode);
+		if (args.HasOption("hclip")) {
+			TextWriter tw = GetTW(args, "hclip");
+			mcr.DumpClip(tw != null ? tw : Console.Out, dumpMode);
+			if (tw != null) tw.Close();
+		}
+		if (args.HasOption("octave")) {
+			TextWriter tw = GetTW(args, "octave");
+			mcr.DumpOctave(tw != null ? tw : Console.Out, dumpMode);
+			if (tw != null) tw.Close();
+		}
+		if (args.HasOption("columns")) {
+			TextWriter tw = GetTW(args, "columns");
+			mcr.DumpColumns(tw != null ? tw : Console.Out, dumpMode);
+			if (tw != null) tw.Close();
+		}
+		if (args.HasOption("rows")) {
+			TextWriter tw = GetTW(args, "rows");
+			mcr.DumpRows(tw != null ? tw : Console.Out, dumpMode);
+			if (tw != null) tw.Close();
+		}
 
 		return 0;
 	}

@@ -65,10 +65,10 @@ class Anim:
 		w = self.wgts[idx]
 		n = len(w)
 		v = []
+		e = nu.empty((n))
 		for frm in range(nfrm):
-			e = nu.zeros((n))
-			for i in range(n):
-				e[i] = frm - self.pts[i]
+			e.fill(frm)
+			e -= self.pts
 			e = func(nu.abs(e))
 			v.append(nu.dot(e, w))
 		return v

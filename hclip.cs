@@ -2121,6 +2121,15 @@ public class HClipTool {
 
 		var mcw = new cMotClipWriter(clip);
 		string motPath = clpPath.Replace(".clip", ".mclp");
+		string outPath = args.GetOpt("out", "");
+		if (outPath.Length > 0) {
+			motPath = outPath;
+		} else {
+			string outDir = args.GetOpt("dir", "");
+			if (outDir.Length > 0) {
+				motPath = outDir + Path.DirectorySeparatorChar + Path.GetFileName(motPath);
+			}
+		}
 		mcw.Save(motPath);
 
 		var mcr = new cMotClipReader();

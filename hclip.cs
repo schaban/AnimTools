@@ -1587,6 +1587,7 @@ public class cMotClipReader {
 	public string mName;
 	public cNode[] mNodes;
 	public Dictionary<string, int> mNodeMap;
+	public string mDumpNodePath;
 
 	public cMotClipReader() {
 	}
@@ -1653,12 +1654,23 @@ public class cMotClipReader {
 		br.Close();
 	}
 
+	protected string GetDumpNodeName(cNode node) {
+		if (mDumpNodePath != null && mDumpNodePath.Length > 0) {
+			string path = mDumpNodePath;
+			if (!(path.EndsWith("/"))) {
+				path += "/";
+			}
+			return path + node.mName;
+		}
+		return node.mName;
+	}
+
 	protected void DumpLogVecs(TextWriter tw, cNode node) {
 		if (node.mRotTrk == null || node.mRotTrk.mSrcMask == 0) return;
 		int nfrm = mFramesNum;
 		for (int c = 0; c < 3; ++c) {
 			tw.WriteLine(@"   {");
-			tw.WriteLine("      name = {0}:lv{1}", node.mName, "xyz"[c]);
+			tw.WriteLine("      name = {0}:lv{1}", GetDumpNodeName(node), "xyz"[c]);
 			tw.Write("      data =");
 			for (int i = 0; i < nfrm; ++i) {
 				VEC lv = node.GetLogVec(i);
@@ -1674,7 +1686,7 @@ public class cMotClipReader {
 		int nfrm = mFramesNum;
 		for (int c = 0; c < 4; ++c) {
 			tw.WriteLine(@"   {");
-			tw.WriteLine("      name = {0}:q{1}", node.mName, "xyzw"[c]);
+			tw.WriteLine("      name = {0}:q{1}", GetDumpNodeName(node), "xyzw"[c]);
 			tw.Write("      data =");
 			for (int i = 0; i < nfrm; ++i) {
 				QUAT q = node.GetQuat(i);
@@ -1691,7 +1703,7 @@ public class cMotClipReader {
 		for (int c = 0; c < 3; ++c) {
 			if ((node.mRotTrk.mSrcMask & (1 << c)) != 0) {
 				tw.WriteLine(@"   {");
-				tw.WriteLine("      name = {0}:r{1}", node.mName, "xyz"[c]);
+				tw.WriteLine("      name = {0}:r{1}", GetDumpNodeName(node), "xyz"[c]);
 				tw.Write("      data =");
 				for (int i = 0; i < nfrm; ++i) {
 					float[] r = node.GetDegrees(i);
@@ -1709,7 +1721,7 @@ public class cMotClipReader {
 		for (int c = 0; c < 3; ++c) {
 			if ((node.mPosTrk.mSrcMask & (1 << c)) != 0) {
 				tw.WriteLine(@"   {");
-				tw.WriteLine("      name = {0}:t{1}", node.mName, "xyz"[c]);
+				tw.WriteLine("      name = {0}:t{1}", GetDumpNodeName(node), "xyz"[c]);
 				tw.Write("      data =");
 				for (int i = 0; i < nfrm; ++i) {
 					VEC pos = node.GetPos(i);
@@ -1882,18 +1894,18 @@ public class cMotClipReader {
 				switch (mode) {
 					case DUMP_MODE.LOGVECS:
 						for (int c = 0; c < 3; ++c) {
-							tbl.mNames[ichn++] = node.mName + ":lv" + "xyz"[c];
+							tbl.mNames[ichn++] = GetDumpNodeName(node) + ":lv" + "xyz"[c];
 						}
 						break;
 					case DUMP_MODE.QUATS:
 						for (int c = 0; c < 4; ++c) {
-							tbl.mNames[ichn++] = node.mName + ":q" + "xyzw"[c];
+							tbl.mNames[ichn++] = GetDumpNodeName(node) + ":q" + "xyzw"[c];
 						}
 						break;
 					default:
 						for (int c = 0; c < 3; ++c) {
 							if ((node.mRotTrk.mSrcMask & (1 << c)) != 0) {
-								tbl.mNames[ichn++] = node.mName + ":r" + "xyz"[c];
+								tbl.mNames[ichn++] = GetDumpNodeName(node) + ":r" + "xyz"[c];
 							}
 						}
 						break;
@@ -1902,7 +1914,7 @@ public class cMotClipReader {
 			if (node.mPosTrk != null && node.mPosTrk.mSrcMask != 0) {
 				for (int c = 0; c < 3; ++c) {
 					if ((node.mPosTrk.mSrcMask & (1 << c)) != 0) {
-						tbl.mNames[ichn++] = node.mName + ":t" + "xyz"[c];
+						tbl.mNames[ichn++] = GetDumpNodeName(node) + ":t" + "xyz"[c];
 					}
 				}
 			}
@@ -2113,6 +2125,8 @@ public class HClipTool {
 
 		var mcr = new cMotClipReader();
 		mcr.Load(motPath);
+
+		mcr.mDumpNodePath = args.GetOpt("nodepath", null);
 		
 		DUMP_MODE dumpMode = DUMP_MODE.DEFAULT;
 		if (args.HasOption("logvecs")) {
